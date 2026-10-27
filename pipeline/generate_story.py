@@ -351,6 +351,12 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
                 raise json.JSONDecodeError("not a JSON object", "", 0)
             return result
         except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:500]
+            if error.code == 429:
+                # A free plan whose per-minute cap is smaller than one full story can never write it:
+                # treat that like a used-up limit so the batch moves on to the next model.
+                if "Request too large" in detail:
+                    raise DailyLimitReached(f"{model} can't fit a whole story on the free plan") from None
             if error.code == 429 and attempt < 3:
                 wait = int(error.headers.get("retry-after", "10") or 10)
                 if wait > MAX_RATE_WAIT:
@@ -359,7 +365,6 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
                 print(f"  Rate limited, waiting {wait}s...")
                 time.sleep(wait)
                 continue
-            detail = error.read().decode("utf-8", errors="replace")[:500]
             # Groq occasionally returns an empty "invalid JSON" generation, usually when the model
             # thinks too long. Ask again, thinking less.
             if "json_validate_failed" in detail and attempt < 3:
