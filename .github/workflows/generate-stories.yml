@@ -1,0 +1,48 @@
+# FlypBook: Scroll Like Shakespeare
+# Writes new stories and handles story requests on a schedule. Free for public repos.
+name: Generate stories
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # every 6 hours (times are UTC)
+  workflow_dispatch:         # adds a "Run workflow" button on the Actions tab
+
+# Never run two batches at once (keeps the request queue simple).
+concurrency:
+  group: generate-stories
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # only used by the keep-alive step below
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate and publish stories
+        working-directory: pipeline
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python run_batch.py
+
+      # GitHub turns off schedules in repos with no activity for 60 days.
+      # If the last commit is over 50 days old, add an empty commit to keep it running.
+      - name: Keep schedule alive
+        if: github.event_name == 'schedule'
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt $(( 50 * 86400 )) ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Keep scheduled story generation alive"
+            git push
+          fi

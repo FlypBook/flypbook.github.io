@@ -1,0 +1,7 @@
+# Secrets: never commit these
+.env
+*.env
+
+# Local test output
+pipeline/output/
+__pycache__/
