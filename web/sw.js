@@ -25,7 +25,7 @@ self.addEventListener("fetch", event => {
   // Stories, accounts, and narration are always live; videos stream (ranges don't cache well).
   if (url.hostname.endsWith("supabase.co") || url.pathname.endsWith(".mp4")) return;
   // The 3D engine from the CDN never changes for a pinned version: cache it forever.
-  if (url.hostname === "cdn.jsdelivr.net" || url.hostname === "esm.sh") {
+  if (["cdn.jsdelivr.net", "esm.sh", "fonts.googleapis.com", "fonts.gstatic.com"].includes(url.hostname)) {
     event.respondWith(caches.open(CACHE).then(async c => (await c.match(req)) || fetch(req).then(res => { c.put(req, res.clone()); return res; })));
     return;
   }

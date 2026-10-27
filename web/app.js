@@ -28,7 +28,7 @@ const feed = document.getElementById("feed");
 const splash = document.getElementById("splash");
 const splashStatus = document.getElementById("splash-status");
 const settingsSheet = document.getElementById("settings");
-const unmuteBtn = document.getElementById("unmute");
+const startBtn = document.getElementById("start-btn");
 const commentsSheet = document.getElementById("comments");
 const discoverSheet = document.getElementById("discover");
 const filterChip = document.getElementById("filter-chip");
@@ -37,7 +37,6 @@ const state = {
   stories: [],          // { data, prepared, card, els, word, ended, media }
   active: -1,
   playing: true,        // autoplay: stories play unless the reader pauses
-  muted: false,         // set when the browser blocks sound before the first tap
   loading: false,
   done: false,
   videos: [],
@@ -58,7 +57,7 @@ const state = {
 const narrator = new Narrator({
   onWord: i => showWord(state.stories[state.active], i),
   onEnd: () => endStory(state.stories[state.active]),
-  onBlocked: () => { setMuted(true); startReading(); },
+  onBlocked: () => askForStartTap(),
 });
 
 const acct = () => window.Account || {};
@@ -102,23 +101,39 @@ function toast(text) {
   setTimeout(() => t.remove(), 2700);
 }
 
-// ---------- Sound: browsers only allow it after the first tap ----------
-function setMuted(m) {
-  state.muted = m;
-  narrator.setMuted(m);
-  unmuteBtn.hidden = !m;
-}
+// ---------- Sound on open ----------
+// FlypBook tries to start with sound right away. Installed apps (and sites you visit a lot) are
+// allowed to; otherwise browsers require one tap first. In that case the opening screen asks
+// for a single "Tap to start reading", and after that every story plays with sound by itself.
 let tapConsumedUntil = 0;
-function unmute() {
-  if (!state.muted) return;
-  setMuted(false);
-  tapConsumedUntil = Date.now() + 400;     // this tap turns sound on; it doesn't also pause
-  const s = state.stories[state.active];
-  // Restarting from the current word inside the tap lets phones allow the sound.
-  if (s && state.playing) narrator.play(s.prepared, Math.max(0, s.word), playOpts());
+/** Ask the browser (with a silent, zero-length clip) whether sound may start without a tap. */
+async function canPlaySound() {
+  try {
+    if (navigator.getAutoplayPolicy) return navigator.getAutoplayPolicy("mediaelement") === "allowed";
+    const probe = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+    await probe.play();
+    return true;
+  } catch { return false; }
 }
-unmuteBtn.addEventListener("click", e => { e.stopPropagation(); unmute(); });
-document.addEventListener("pointerdown", () => { if (state.muted) unmute(); }, { capture: true });
+function askForStartTap() {
+  state.awaitingStart = true;
+  narrator.stop();
+  state.playing = false;
+  updateMedia();
+  splash.classList.remove("gone");
+  splashStatus.textContent = "";
+  startBtn.hidden = false;
+}
+startBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  state.awaitingStart = false;
+  startBtn.hidden = true;
+  splash.classList.add("gone");
+  tapConsumedUntil = Date.now() + 400;
+  const s = state.stories[state.active];
+  if (s) { s.introDone = true; s.card.classList.remove("intro-on"); }
+  startReading();        // inside the tap, so the browser allows sound from now on
+});
 
 // ---------- Loading stories from Supabase ----------
 async function api(path, init) {
@@ -318,58 +333,66 @@ function el(tag, cls, text) {
 const minutes = s => `${Math.max(1, Math.round(s / 60))} min`;
 const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
+// Every story gets its own caption look: font, text treatment, highlight color and method.
+const CAPTION = {
+  fonts: ["f-sans", "f-serif", "f-grot", "f-round"],
+  treatments: ["t-stroke", "t-shadow", "t-plate"],
+  highlights: ["h-ink", "h-marker", "h-underline", "h-glow", "h-box", "h-spot", "h-bounce"],
+  colors: [["#ffd43b", "#1b1400"], ["#7af7ff", "#00262b"], ["#ff8fab", "#33000e"], ["#b9fbc0", "#0b2a10"],
+           ["#ffb86b", "#2e1600"], ["#c4b5fd", "#1a0f3d"], ["#ff6b6b", "#2b0000"], ["#fde68a", "#2a2000"]],
+};
+function captionStyle(seed) {
+  const r = mulberry32(seed ^ 0x9e3779b9), pick = a => a[Math.floor(r() * a.length)];
+  const font = pick(CAPTION.fonts), highlight = pick(CAPTION.highlights);
+  // Markers and plates already have a background; keep the outline treatment off them.
+  let treatment = pick(CAPTION.treatments);
+  if (highlight === "h-marker" && treatment === "t-stroke") treatment = "t-shadow";
+  const [hl, ink] = pick(CAPTION.colors);
+  return { classes: [font, treatment, highlight], hl, ink };
+}
+
 function buildCard(story) {
   const d = story.data;
   const card = el("article", "card");
+  const style = captionStyle(story.seed);
+  card.classList.add(...style.classes);
+  card.style.setProperty("--hl", style.hl);
+  card.style.setProperty("--hl-ink", style.ink);
   const media = el("div", "media");
   const scrim = el("div", "scrim");
-  const layer = el("div", "layer");
 
-  // Opening title card (shows for the first few seconds of each story)
-  const tc = el("div", "titlecard");
-  const head = el("div", "tc-head");
-  head.append(el("div", "avatar", d.username ? d.username[0].toUpperCase() : "F"));
-  const who = el("div", "tc-who");
-  who.append(el("strong", null, d.username ? "@" + d.username : "FlypBook Stories"));
-  who.append(el("span", null, `${d.username ? "requested this · " : ""}${minutes(d.est_read_seconds)} story`));
-  head.append(who);
-  const tags = el("div", "tc-tags");
-  tags.append(el("span", "tag", d.genre), el("span", "tag", LEVEL_LABEL[d.reading_level] || d.reading_level), el("span", "tag ai", "AI-generated"));
-  tc.append(head, el("h2", "tc-title", d.title), tags);
+  // Chapter line: what kind of story, how long, who asked for it
+  const chapter = el("div", "chapter");
+  chapter.append(el("span", null, d.genre), el("span", null, minutes(d.est_read_seconds)), el("span", null, "AI story"));
+  if (d.username) chapter.append(el("span", "by", `requested by @${d.username}`));
+
+  // Opening: the title, centered like a chapter heading, then it fades into the captions
+  const intro = el("div", "intro");
+  intro.append(el("small", null, LEVEL_LABEL[d.reading_level] || "A FlypBook story"), el("h2", null, d.title), el("div", "rule"));
   const captions = el("div", "captions");
-  layer.append(tc, captions);
-
-  // Bottom-left info (TikTok style)
-  const info = el("div", "info");
-  info.append(el("div", "who", d.username ? "@" + d.username : "@FlypBook"));
-  info.append(el("div", "ttl", d.title));
-  info.append(el("div", "tags", `#${d.genre.replace(/[^a-z]+/gi, "")} #${d.tone} #storytime`));
-  const meta = el("div", "meta");
-  meta.append(el("span", "ai", "AI story"), el("span", null, `♪ ${minutes(d.est_read_seconds)} narrated read`));
-  info.append(meta);
 
   const playmark = el("div", "playmark");
   playmark.innerHTML = ICON.play;
 
-  // Right rail
-  const rail = el("div", "rail");
-  const av = el("button", "avatar-btn", d.username ? d.username[0].toUpperCase() : "F");
-  av.setAttribute("aria-label", "Storyteller");
-  const likeBtn = railButton(ICON.heart, d.like_count || 0, "Like", "like");
-  const commentBtn = railButton(ICON.comment, d.comment_count || 0, "Comments", "comment");
-  const saveBtn = railButton(ICON.save, "Save", "Save", "save");
-  const shareBtn = railButton(ICON.share, "Share", "Share", "share");
-  const moreBtn = railButton(ICON.more, "", "More options", "more");
-  rail.append(av, likeBtn, commentBtn, saveBtn, shareBtn, moreBtn);
+  // Reading bar: actions in one row, page count on the right
+  const readbar = el("div", "readbar");
+  const actions = el("div", "actions");
+  const likeBtn = actBtn(ICON.heart, d.like_count || 0, "Like", "like");
+  const commentBtn = actBtn(ICON.comment, d.comment_count || 0, "Comments", "comment");
+  const saveBtn = actBtn(ICON.save, "", "Save", "save");
+  const shareBtn = actBtn(ICON.share, "", "Share", "share");
+  const moreBtn = actBtn(ICON.more, "", "More options", "more");
+  actions.append(likeBtn, commentBtn, saveBtn, shareBtn, moreBtn);
+  const pagec = el("div", "pagec", `p. 1 / ${story.prepared.pages.length}`);
+  readbar.append(actions, pagec);
   const stop = fn => e => { e.stopPropagation(); fn(); };
   likeBtn.addEventListener("click", stop(() => toggleLike(story)));
   commentBtn.addEventListener("click", stop(() => openComments(story)));
   saveBtn.addEventListener("click", stop(() => toggleSave(story)));
   shareBtn.addEventListener("click", stop(() => shareStory(story)));
   moreBtn.addEventListener("click", stop(() => reportStory(story)));
-  av.addEventListener("click", stop(() => toast(d.username ? `Requested by @${d.username}` : "Written by FlypBook's AI storyteller")));
 
-  // Scrubbable progress bar + time readout
+  // Scrubbable progress line + time readout
   const scrub = el("div", "scrub");
   const track = el("div", "track"), fill = el("div", "fill"), knob = el("div", "knob");
   track.append(fill, knob); scrub.append(track);
@@ -380,20 +403,20 @@ function buildCard(story) {
   endcard.addEventListener("click", e => e.stopPropagation());
   const credit = el("div", "credit-line");
 
-  card.append(media, scrim, layer, info, playmark, rail, scrub, scrubTime, endcard, credit);
+  card.append(media, scrim, chapter, intro, captions, playmark, readbar, scrub, scrubTime, endcard, credit);
   wireTaps(story, card);
   story.card = card;
-  story.els = { media, captions, fill, knob, credit, endcard, likeBtn, commentBtn, saveBtn };
+  story.els = { media, captions, fill, knob, credit, endcard, likeBtn, commentBtn, saveBtn, pagec };
   story.page = -1;
   observer.observe(card);
   refreshRail(story);
 }
 
-function railButton(icon, label, aria, cls) {
-  const b = el("button", `rail-btn ${cls}`);
+function actBtn(icon, label, aria, cls) {
+  const b = el("button", `act-btn ${cls}`);
   b.setAttribute("aria-label", aria);
   b.innerHTML = icon;
-  b.append(el("span", null, String(label)));
+  if (label !== "") b.append(el("span", null, String(label)));
   return b;
 }
 
@@ -483,7 +506,6 @@ function refreshRail(story) {
   story.els.likeBtn.querySelector("span").textContent = formatCount(story.data.like_count || 0);
   story.els.commentBtn.querySelector("span").textContent = formatCount(story.data.comment_count || 0);
   story.els.saveBtn.classList.toggle("on", state.saved.has(id));
-  story.els.saveBtn.querySelector("span").textContent = state.saved.has(id) ? "Saved" : "Save";
 }
 
 async function toggleLike(story) {
@@ -737,6 +759,7 @@ function showWord(story, i) {
   const f = (i + 1) / words.length;
   story.els.fill.style.width = `${f * 100}%`;
   story.els.knob.style.left = `${f * 100}%`;
+  story.els.pagec.textContent = `p. ${words[i].page + 1} / ${story.prepared.pages.length}`;
 }
 
 // ---------- End of story: the comprehension question ----------
@@ -804,24 +827,37 @@ function showAnswer(story, res, choice) {
 }
 
 // ---------- Playback: pause/play controls the voice AND the background together ----------
-const playOpts = () => ({ rate: Number(state.settings.rate), narration: state.settings.narration === "on", muted: state.muted });
+const playOpts = () => ({ rate: Number(state.settings.rate), narration: state.settings.narration === "on" });
+const INTRO_MS = 1700;
 
 function startReading() {
   const story = state.stories[state.active];
-  if (!story || story.card.classList.contains("reported") || breakShowing) return;
+  if (!story || story.card.classList.contains("reported") || breakShowing || state.awaitingStart) return;
   if (story.ended) { story.ended = false; story.card.classList.remove("ended"); story.word = -1; }
   state.playing = true;
-  story.card.classList.add("reading");
   story.card.classList.remove("paused");
-  if (!story.startedAt) {
-    story.startedAt = Date.now();
-    setTimeout(() => story.card.classList.add("intro-done"), 3500);   // title card, then just captions
-  }
-  narrator.play(story.prepared, Math.max(0, story.word), playOpts());
+  story.startedAt = story.startedAt || Date.now();
   updateMedia();
+  // First time on a story: show its title like a chapter heading, then start reading.
+  if (!story.introDone) {
+    story.introDone = true;
+    story.card.classList.add("intro-on");
+    story.introTimer = setTimeout(() => {
+      story.card.classList.remove("intro-on");
+      if (state.stories[state.active] === story && state.playing) beginNarration(story);
+    }, INTRO_MS);
+    return;
+  }
+  beginNarration(story);
+}
+function beginNarration(story) {
+  story.card.classList.add("reading");
+  narrator.play(story.prepared, Math.max(0, story.word), playOpts());
 }
 function pauseReading() {
   state.playing = false;
+  const s = state.stories[state.active];
+  if (s?.introTimer) { clearTimeout(s.introTimer); s.introTimer = null; s.card.classList.remove("intro-on"); }
   narrator.stop();
   const story = state.stories[state.active];
   if (story && !story.ended) story.card.classList.add("paused");
@@ -839,6 +875,7 @@ function setActive(index) {
   if (prev) {
     narrator.stop();
     prev.card.classList.remove("paused");
+    if (prev.introTimer) { clearTimeout(prev.introTimer); prev.introTimer = null; prev.card.classList.remove("intro-on"); }
     const progress = prev.word > 0 ? prev.word / prev.prepared.words.length : 0;
     if (!prev.ended && prev.startedAt && progress < 0.3) logEvent(prev, "skip", progress);
   }
@@ -934,12 +971,14 @@ async function init() {
   applySettings();
   showInstall();
   const wait = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
-  await Promise.all([loadVideos(), wait(window.gamesReady, 4000), wait(window.accountReady, 3000)]);
+  const [, , , soundOk] = await Promise.all([loadVideos(), wait(window.gamesReady, 4000), wait(window.accountReady, 3000), canPlaySound()]);
+  state.awaitingStart = !soundOk;
   try {
     await resetFeed();
     state.booted = true;
+    if (state.awaitingStart) { askForStartTap(); return; }
     splash.classList.add("gone");
-    startReading();                       // autoplay (muted if the browser requires a tap first)
+    startReading();                       // plays with sound right away
   } catch (err) {
     showError(err);
   }
