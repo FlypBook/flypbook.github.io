@@ -12,6 +12,7 @@ Needs GROQ_API_KEY, SUPABASE_URL and SUPABASE_SECRET_KEY (in .env locally, GitHu
 
 import datetime
 import json
+import random
 import sys
 import urllib.error
 import urllib.request
@@ -189,12 +190,34 @@ def process_requests(api_key):
     return done
 
 
+def popular_kinds():
+    """What readers like, finish, and share most lately (by genre + tone), from the database."""
+    try:
+        rows = supabase("POST", "rpc/tag_popularity", body={}) or []
+        return [r for r in rows if float(r["score"] or 0) > 0 and r["genre"] in g.GENRES and r["tone"] in g.TONES]
+    except Exception as error:
+        print(f"(Couldn't read popularity yet: {error})")
+        return []
+
+
+def pick_kind(popular):
+    """70% of the time, lean toward what readers love; 30% stays random so new kinds get a chance."""
+    if popular and random.random() < 0.7:
+        r = random.choices(popular, weights=[float(p["score"]) for p in popular])[0]
+        return r["genre"], r["tone"]
+    return None, None
+
+
 def generate_regular(api_key):
     done = 0
+    popular = popular_kinds()
+    if popular:
+        print("Readers' favorites lately: " + ", ".join(f"{p['genre']}/{p['tone']} ({p['score']})" for p in popular[:5]))
     for i in range(STORIES_PER_RUN):
         print(f"\n--- Regular story {i + 1}/{STORIES_PER_RUN}")
+        genre, tone = pick_kind(popular)
         try:
-            result = g.generate(api_key)
+            result = g.generate(api_key, genre=genre, tone=tone)
         except g.DailyLimitReached:
             raise
         except Exception as error:

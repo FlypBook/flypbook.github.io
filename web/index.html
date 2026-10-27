@@ -9,6 +9,14 @@
   <meta property="og:title" content="FlypBook: Scroll Like Shakespeare">
   <meta property="og:description" content="Scroll Like Shakespeare. Short stories you read along with, one swipe at a time.">
   <meta property="og:type" content="website">
+  <meta property="og:image" content="icons/icon-512.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FlypBook">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -63,8 +71,14 @@
           <button data-value="on">On</button><button data-value="dim">Dim</button><button data-value="off">Off</button>
         </div>
       </div>
+      <div class="setting" id="install-row" hidden>
+        <span>Get the app</span>
+        <button class="btn-primary" hidden>Install FlypBook</button>
+        <p class="fine" hidden>On iPhone: tap the Share button, then <b>Add to Home Screen</b>.</p>
+      </div>
       <p class="fine">Every story is written by AI and checked for safety. Background videos from
-        <a href="https://pixabay.com" target="_blank" rel="noopener">Pixabay</a>.</p>
+        <a href="https://pixabay.com" target="_blank" rel="noopener">Pixabay</a>.
+        <a href="privacy.html" target="_blank">Privacy policy</a>.</p>
     </section>
 
     <div id="splash" role="status">
@@ -81,5 +95,6 @@
   <script type="module" src="game3d_more.js"></script>
   <script src="narrator.js"></script>
   <script src="app.js"></script>
+  <script type="module" src="account.js"></script>
 </body>
 </html>

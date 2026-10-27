@@ -1,0 +1,36 @@
+# FlypBook: Scroll Like Shakespeare
+# Publishes the web app (the web/ folder) to GitHub Pages, free, whenever it changes.
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/deploy-site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stamp the release so phones pick up the new version
+        run: sed -i "s/flypbook-BUILD/flypbook-${GITHUB_SHA::8}/" web/sw.js
+      - name: Leave out local test pages
+        run: rm -rf web/_test
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
