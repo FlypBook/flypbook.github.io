@@ -26,7 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Stamp the release so phones pick up the new version
-        run: sed -i "s/flypbook-BUILD/flypbook-${GITHUB_SHA::8}/" web/sw.js
+        run: |
+          sed -i "s/flypbook-BUILD/flypbook-${GITHUB_SHA::8}/" web/sw.js
+          # ?v=BUILD on styles and scripts becomes the commit id, so browsers can't reuse old copies
+          sed -i "s/?v=BUILD/?v=${GITHUB_SHA::8}/g" web/index.html
       - name: Leave out local test pages
         run: rm -rf web/_test
       - uses: actions/upload-pages-artifact@v3

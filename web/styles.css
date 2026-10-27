@@ -2,7 +2,7 @@
    A printed-book look: cream paper and black ink, one vermilion accent, thin line icons,
    small-caps running heads, ruled-paper forms. No glass bubbles, gradients, or glows on controls.
    Captions still get a different font and highlight every story. */
-:root {
+:root { color-scheme: dark;
   --base: #0d0b10;
   --ink: #141116;
   --ink-2: #2a2530;
