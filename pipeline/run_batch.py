@@ -164,6 +164,11 @@ def process_requests(api_key):
 
         try:
             result = g.generate(api_key, request=req["prompt"], genre=genre, tone=tone, user=username)
+        except g.DailyLimitReached as error:
+            # Not the request's fault: put it (and the rest of the queue) back for the next run.
+            print(f"  {error}. Leaving requests queued for the next run.")
+            update_request(req["id"], status="queued")
+            raise
         except Exception as error:  # never leave a request stuck because of one bad run
             result = {"status": "failed", "reason": str(error)}
 
@@ -190,6 +195,8 @@ def generate_regular(api_key):
         print(f"\n--- Regular story {i + 1}/{STORIES_PER_RUN}")
         try:
             result = g.generate(api_key)
+        except g.DailyLimitReached:
+            raise
         except Exception as error:
             print(f"  Error: {error}")
             continue
@@ -201,15 +208,22 @@ def generate_regular(api_key):
 
 def main():
     api_key = g.load_api_key()
-    from_requests = process_requests(api_key)
-    regular = generate_regular(api_key)
+    from_requests = regular = 0
+    limited = False
+    try:
+        from_requests = process_requests(api_key)
+        regular = generate_regular(api_key)
+    except g.DailyLimitReached as error:
+        limited = True
+        print(f"\n{error}. Skipping the rest of the writing until the next run.")
     try:
         backfill_narration()
     except Exception as error:
         print(f"Backfill skipped: {error}")
     print(f"\nDone. Published {from_requests} requested + {regular} regular stories.")
-    # Fail the GitHub Actions run (so you get an email) if nothing at all was published.
-    if from_requests + regular == 0 and STORIES_PER_RUN > 0:
+    # Fail the GitHub Actions run (so you get an email) if nothing was published for a real
+    # reason. Hitting the free daily limit is expected now and then, so that isn't a failure.
+    if from_requests + regular == 0 and STORIES_PER_RUN > 0 and not limited:
         sys.exit(1)
 
 

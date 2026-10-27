@@ -248,6 +248,13 @@ def load_api_key():
     return load_setting("GROQ_API_KEY")
 
 
+MAX_RATE_WAIT = 120  # seconds; anything longer means the free daily limit is used up
+
+
+class DailyLimitReached(RuntimeError):
+    """Groq's free daily limit is used up; try again on a later run."""
+
+
 def call_llm(api_key, system, user, temperature, reasoning_effort="medium", model=None):
     """Send one chat request and return the parsed JSON object the model replies with."""
     model = model or REVIEW_MODEL
@@ -282,6 +289,9 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
         except urllib.error.HTTPError as error:
             if error.code == 429 and attempt < 3:
                 wait = int(error.headers.get("retry-after", "10") or 10)
+                if wait > MAX_RATE_WAIT:
+                    # A long wait means the free daily limit is used up; don't sit there for an hour.
+                    raise DailyLimitReached(f"Groq daily limit reached (asked to wait {wait}s)") from None
                 print(f"  Rate limited, waiting {wait}s...")
                 time.sleep(wait)
                 continue
@@ -453,6 +463,8 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
         print(f"Writing draft (attempt {attempt}/{MAX_ATTEMPTS})...")
         try:
             draft = clean_story(call_llm(api_key, STORY_SYSTEM, user_prompt, temperature=0.95, model=model))
+        except DailyLimitReached:
+            raise  # no point retrying until the limit resets
         except RuntimeError as error:
             last_problem = str(error)
             print(f"  {last_problem}")
@@ -471,6 +483,8 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
         try:
             edited = clean_story(call_llm(api_key, EDITOR_SYSTEM, f"Draft to edit:\n{editor_input}",
                                           temperature=0.7, reasoning_effort="low", model=model))
+        except DailyLimitReached:
+            raise  # no point retrying until the limit resets
         except RuntimeError as error:
             print(f"  Editor failed ({error}); using the draft.")
             edited = None
@@ -487,6 +501,8 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
         q = data["question"]
         try:
             safety, logic, engagement = review_story(api_key, data)
+        except DailyLimitReached:
+            raise  # no point retrying until the limit resets
         except RuntimeError as error:
             last_problem = str(error)
             print(f"  {last_problem}")
