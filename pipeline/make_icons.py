@@ -1,20 +1,42 @@
-"""Draw FlypBook's app icons (pages fanning out mid-flip on a black tile with a violet edge) into web/icons/.
-Matches the logo mark in web/index.html. Drawn at 4x and scaled down for smooth edges."""
-import math
+"""Draw FlypBook's app icons (an open book, centered, with one violet page mid-flip and a gold ribbon,
+on a black tile with a violet edge) into web/icons/.
+Same shapes as the logo mark in web/index.html. Drawn at 4x and scaled down for smooth edges."""
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "icons"
-TILE = (18, 16, 22)
-PAGES = [(-16, (76, 47, 153)), (3, (139, 92, 246)), (23, (243, 236, 223))]   # (angle, color), back to front
+TILE, EDGE = (18, 16, 22), (96, 66, 180)
+COVER, PAGE_L, PAGE_R = (76, 47, 153), (243, 236, 223), (230, 220, 203)
+FLIP, SHINE = (139, 92, 246), (154, 118, 248)
 GOLD, RULE = (255, 212, 59), (185, 173, 152)
+DY = -0.4                                  # the whole book sits 0.4 units up, like the SVG
 
 
-def rotate(points, angle, pivot):
-    a = math.radians(angle)
-    px, py = pivot
-    return [(px + (x - px) * math.cos(a) - (y - py) * math.sin(a), py + (x - px) * math.sin(a) + (y - py) * math.cos(a)) for x, y in points]
+def curve(p0, c1, c2, p3, steps=24):
+    """Points along a cubic Bezier curve (without the start point)."""
+    pts = []
+    for i in range(1, steps + 1):
+        t = i / steps
+        a, b, c, d = (1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3
+        pts.append((a * p0[0] + b * c1[0] + c * c2[0] + d * p3[0], a * p0[1] + b * c1[1] + c * c2[1] + d * p3[1]))
+    return pts
+
+
+def mirror(pts):
+    return [(32 - x, y) for x, y in pts]
+
+
+COVER_PTS = [(4.6, 10.4), (4.6, 24)] + curve((4.6, 24), (9, 23.1), (13, 23.6), (16, 25.6)) \
+    + curve((16, 25.6), (19, 23.6), (23, 23.1), (27.4, 24)) + [(27.4, 10.4)]
+LEFT_PTS = [(16, 11.2)] + curve((16, 11.2), (13.1, 9.3), (9.4, 8.8), (5.8, 9.5)) + [(5.8, 22.8)] \
+    + curve((5.8, 22.8), (9.4, 22.1), (13.1, 22.6), (16, 24.5))
+FLIP_TOP = [(16, 11.2)] + curve((16, 11.2), (17.7, 8.2), (20.2, 6.3), (23.6, 5.7))
+FLIP_PTS = FLIP_TOP + [(23, 19.2)] + curve((23, 19.2), (20.1, 19.6), (17.7, 21.3), (16, 24.5))
+SHINE_PTS = FLIP_TOP + [(23.4, 10.1)] + curve((23.4, 10.1), (20.4, 10.7), (18, 12.7), (16, 15.7))
+RULES = [[(8.2, y)] + curve((8.2, y), (10.2, y - .3), (12.1, y), (13.8, y + .8)) for y in (13.4, 16.4)] \
+    + [[(8.2, 19.4)] + curve((8.2, 19.4), (9.6, 19.2), (10.9, 19.3), (12.1, 19.7))]
+RIBBON = [(15, 24.4), (15, 28.6), (16, 27.6), (17, 28.6), (17, 24.4)]
 
 
 def icon(size, maskable=False):
@@ -23,23 +45,22 @@ def icon(size, maskable=False):
     d = ImageDraw.Draw(img)
     if maskable:
         d.rectangle([0, 0, S, S], fill=TILE)
-        k, off = 0.62, S * 0.19          # keep the art inside the safe zone
+        k, off = 0.62, S * 0.19          # keep the art inside the safe zone, still centered
     else:
-        r = int(S * 8 / 32)
-        d.rounded_rectangle([S * 1 / 32, S * 1 / 32, S * 31 / 32, S * 31 / 32], radius=r, fill=TILE)
-        d.rounded_rectangle([S * 1.6 / 32, S * 1.6 / 32, S * 30.4 / 32, S * 30.4 / 32], radius=int(r * 0.92),
-                            outline=(96, 66, 180), width=max(2, int(S * 0.6 / 32)))
+        d.rounded_rectangle([S * 1 / 32, S * 1 / 32, S * 31 / 32, S * 31 / 32], radius=int(S * 8 / 32), fill=TILE)
+        d.rounded_rectangle([S * 1.5 / 32, S * 1.5 / 32, S * 30.5 / 32, S * 30.5 / 32], radius=int(S * 7.5 / 32),
+                            outline=EDGE, width=max(2, int(S * 0.8 / 32)))
         k, off = 1, 0
     u = S / 32 * k                       # one design unit
-    P = lambda x, y: (off + x * u, off + y * u)
-    pivot = P(9.5, 25)
-    for angle, color in PAGES:
-        corners = [P(9.5, 8), P(22.5, 8), P(22.5, 25), P(9.5, 25)]
-        d.polygon(rotate(corners, angle, pivot), fill=color)
-        if color == PAGES[-1][1]:
-            d.polygon(rotate([P(18.5, 8), P(22.5, 8), P(22.5, 12)], angle, pivot), fill=GOLD)
-            for y, x2 in ((13, 19.5), (16, 19.5), (19, 17)):
-                d.line(rotate([P(12.5, y), P(x2, y)], angle, pivot), fill=RULE, width=max(1, int(u * 1.1)))
+    P = lambda pts: [(off + x * u, off + (y + DY) * u) for x, y in pts]
+    d.polygon(P(COVER_PTS), fill=COVER)
+    d.polygon(P(LEFT_PTS), fill=PAGE_L)
+    d.polygon(P(mirror(LEFT_PTS)), fill=PAGE_R)
+    for line in RULES:
+        d.line(P(line), fill=RULE, width=max(1, round(u * 0.9)), joint="curve")
+    d.polygon(P(FLIP_PTS), fill=FLIP)
+    d.polygon(P(SHINE_PTS), fill=SHINE)
+    d.polygon(P(RIBBON), fill=GOLD)
     return img.resize((size, size), Image.LANCZOS)
 
 

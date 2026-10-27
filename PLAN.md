@@ -63,3 +63,6 @@ Requirements that every phase must follow. The full original phase plan lives in
 - Reports: you must be logged in to report, and one report hides the story until it's reviewed in the Table Editor.
 - Deleting an account deletes all personal rows. Stories the user requested stay public but lose the "requested by" credit.
 - To do in Phase 6: make the generator favor the most-liked and most-finished tags (it currently picks genres at random).
+
+## Logo (2026-10-27)
+- The mark is an **open book, centered** on a black tile with a thin violet edge: cream pages on a deep violet cover, one violet page mid-turn (the "flyp"), and a gold ribbon bookmark under the spine. It's drawn once as an SVG symbol in `web/index.html` and once in `pipeline/make_icons.py` for the app icons (same shapes in both). The wordmark is Bricolage Grotesque, upright, with "Book" in violet.
