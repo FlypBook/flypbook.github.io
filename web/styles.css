@@ -23,6 +23,10 @@
   --safe-b: env(safe-area-inset-bottom);
   --above-dock: calc(var(--dock-h) + var(--dock-gap) + var(--safe-b));
   --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --brand-font: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --violet: #8b5cf6;
+  --violet-2: #a78bfa;
+  --violet-deep: #1a1229;
   --sans: "Segoe UI", Roboto, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   /* per-story caption style (set by the app) */
   --hl: #ffd43b;
@@ -43,10 +47,11 @@ svg.ln path[d*="h.01"] { stroke-width: 2.6; }
 #topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: grid; grid-template-columns: 1fr auto; align-items: center;
   row-gap: 6px; padding: calc(var(--safe-t) + 10px) 16px 0; pointer-events: none; }
 #topbar > *, .feed-tabs > * { pointer-events: auto; }
-.logo { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-weight: 800; font-size: 1.3rem; letter-spacing: -0.01em;
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); }
-.logo b, .splash-logo b { font-style: italic; font-weight: 800; color: inherit; }
-.logo-mark { width: 24px; height: 24px; flex: none; }
+/* Wordmark: upright, tight, two-tone */
+.logo { display: flex; align-items: center; gap: 9px; font-family: var(--brand-font); font-weight: 800; font-size: 1.4rem; letter-spacing: -0.045em;
+  font-variation-settings: "opsz" 48; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); }
+.logo b, .splash-logo b { font-style: normal; font-weight: 800; color: var(--violet-2); }
+.logo-mark { width: 30px; height: 30px; flex: none; filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5)); }
 .plain-btn { width: 40px; height: 40px; display: grid; place-items: center; color: #fff; filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.6)); }
 .plain-btn svg { width: 24px; height: 24px; }
 .icon-btn { width: 36px; height: 36px; display: grid; place-items: center; font-size: 1.6rem; line-height: 1; color: inherit; }
@@ -54,7 +59,7 @@ svg.ln path[d*="h.01"] { stroke-width: 2.6; }
 .feed-tabs button { position: relative; padding: 4px 0 6px; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
   color: rgba(255, 255, 255, 0.55); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6); }
 .feed-tabs button[aria-current="true"] { color: #fff; }
-.feed-tabs button[aria-current="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); }
+.feed-tabs button[aria-current="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--violet); }
 .filter-chip { color: var(--gold) !important; letter-spacing: 0.08em !important; }
 .filter-chip[hidden] { display: none; }
 
@@ -206,18 +211,19 @@ svg.ln path[d*="h.01"] { stroke-width: 2.6; }
 .toast.out { opacity: 0; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 
-/* ---------- Dock: a paper bookmark strip ---------- */
+/* ---------- Dock: black with violet ---------- */
 #bottomnav { position: absolute; z-index: 8; left: 10px; right: 10px; bottom: calc(var(--dock-gap) + var(--safe-b)); height: var(--dock-h);
-  display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; background: var(--paper); color: var(--ink); border-radius: 8px;
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5); }
+  display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; color: #fff; border-radius: 12px;
+  background: linear-gradient(180deg, #17121f, #0c0a10); border: 1px solid rgba(139, 92, 246, 0.35);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(167, 139, 250, 0.12); }
 #bottomnav button { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em;
-  text-transform: uppercase; color: #8a8072; position: relative; height: 100%; justify-content: center; }
+  text-transform: uppercase; color: #8d84a3; position: relative; height: 100%; justify-content: center; transition: color 0.2s; }
 #bottomnav button svg { width: 24px; height: 24px; }
-#bottomnav button[aria-current="true"] { color: var(--ink); }
-#bottomnav button[aria-current="true"]::after { content: ""; position: absolute; top: 0; width: 22px; height: 3px; background: var(--accent); }
-#bottomnav .create i { display: grid; place-items: center; width: 34px; height: 30px; border-radius: 6px; background: var(--ink); color: var(--paper); }
+#bottomnav button[aria-current="true"] { color: var(--violet-2); }
+#bottomnav button[aria-current="true"]::after { content: ""; position: absolute; top: -1px; width: 22px; height: 3px; border-radius: 0 0 3px 3px; background: var(--violet); }
+#bottomnav .create i { display: grid; place-items: center; width: 36px; height: 32px; border-radius: 9px; background: var(--violet); color: #fff; }
 #bottomnav .create i svg { width: 20px; height: 20px; }
-#bottomnav .create { color: var(--ink); }
+#bottomnav .create { color: #d8ccff; }
 .badge { position: absolute; top: 8px; right: calc(50% - 18px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
   background: var(--accent); color: #fff; font-size: 0.62rem; font-weight: 800; display: grid; place-items: center; letter-spacing: 0; }
 .badge[hidden] { display: none; }
@@ -315,7 +321,7 @@ svg.ln path[d*="h.01"] { stroke-width: 2.6; }
 #splash.gone { opacity: 0; visibility: hidden; }
 .splash-mark { width: 72px; height: 72px; margin-bottom: 14px; animation: flip 1.8s var(--ease-out) infinite; }
 @keyframes flip { 0%, 35% { transform: perspective(300px) rotateY(0); } 75%, 100% { transform: perspective(300px) rotateY(360deg); } }
-.splash-logo { font-family: var(--serif); font-size: 2.8rem; font-weight: 800; letter-spacing: -0.02em; }
+.splash-logo { font-family: var(--brand-font); font-size: 3rem; font-weight: 800; letter-spacing: -0.05em; font-variation-settings: "opsz" 96; }
 .splash-tag { font-family: var(--serif); font-style: italic; font-size: 1.05rem; color: var(--muted); }
 .splash-status { margin-top: 28px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(255, 255, 255, 0.45); }
 .start-btn { margin-top: 26px; padding: 14px 28px; border-radius: 6px; font-weight: 800; font-size: 1rem; background: var(--paper); color: var(--ink); }

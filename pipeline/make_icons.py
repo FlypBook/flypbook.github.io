@@ -1,34 +1,46 @@
-"""Draw FlypBook's app icons (a book with a page mid-flip on a violet gradient) into web/icons/."""
+"""Draw FlypBook's app icons (pages fanning out mid-flip on a black tile with a violet edge) into web/icons/.
+Matches the logo mark in web/index.html. Drawn at 4x and scaled down for smooth edges."""
+import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "icons"
+TILE = (18, 16, 22)
+PAGES = [(-16, (76, 47, 153)), (3, (139, 92, 246)), (23, (243, 236, 223))]   # (angle, color), back to front
+GOLD, RULE = (255, 212, 59), (185, 173, 152)
+
+
+def rotate(points, angle, pivot):
+    a = math.radians(angle)
+    px, py = pivot
+    return [(px + (x - px) * math.cos(a) - (y - py) * math.sin(a), py + (x - px) * math.sin(a) + (y - py) * math.cos(a)) for x, y in points]
 
 
 def icon(size, maskable=False):
-    s = size
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    # violet diagonal gradient
-    grad = Image.new("RGBA", (s, s))
-    px = grad.load()
-    for y in range(s):
-        for x in range(s):
-            t = (x + y) / (2 * s)
-            px[x, y] = (int(192 + (139 - 192) * t), int(132 + (92 - 132) * t), int(252 + (246 - 252) * t), 255)
-    mask = Image.new("L", (s, s), 0)
-    radius = 0 if maskable else int(s * 0.22)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, s - 1, s - 1], radius=radius, fill=255)
-    img.paste(grad, (0, 0), mask)
+    S = size * 4
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    k = 0.62 if maskable else 0.78        # maskable icons keep art inside the safe zone
-    c = s / 2
-    def P(x, y):  # design space is 32x32, centered
-        return (c + (x - 16) / 32 * s * k, c + (y - 16) / 32 * s * k)
-    d.polygon([P(16, 9), P(10, 7.6), P(4.5, 8.2), P(4.5, 24.5), P(10, 23.8), P(16, 25)], fill=(255, 255, 255, 235))   # left page
-    d.polygon([P(16, 9), P(19, 5.8), P(26, 4.4), P(26, 20.4), P(19, 21.8), P(16, 25)], fill=(255, 212, 59, 255))     # flipping page
-    d.line([P(16, 9), P(16, 25)], fill=(255, 255, 255, 140), width=max(1, s // 64))
-    return img
+    if maskable:
+        d.rectangle([0, 0, S, S], fill=TILE)
+        k, off = 0.62, S * 0.19          # keep the art inside the safe zone
+    else:
+        r = int(S * 8 / 32)
+        d.rounded_rectangle([S * 1 / 32, S * 1 / 32, S * 31 / 32, S * 31 / 32], radius=r, fill=TILE)
+        d.rounded_rectangle([S * 1.6 / 32, S * 1.6 / 32, S * 30.4 / 32, S * 30.4 / 32], radius=int(r * 0.92),
+                            outline=(96, 66, 180), width=max(2, int(S * 0.6 / 32)))
+        k, off = 1, 0
+    u = S / 32 * k                       # one design unit
+    P = lambda x, y: (off + x * u, off + y * u)
+    pivot = P(9.5, 25)
+    for angle, color in PAGES:
+        corners = [P(9.5, 8), P(22.5, 8), P(22.5, 25), P(9.5, 25)]
+        d.polygon(rotate(corners, angle, pivot), fill=color)
+        if color == PAGES[-1][1]:
+            d.polygon(rotate([P(18.5, 8), P(22.5, 8), P(22.5, 12)], angle, pivot), fill=GOLD)
+            for y, x2 in ((13, 19.5), (16, 19.5), (19, 17)):
+                d.line(rotate([P(12.5, y), P(x2, y)], angle, pivot), fill=RULE, width=max(1, int(u * 1.1)))
+    return img.resize((size, size), Image.LANCZOS)
 
 
 OUT.mkdir(parents=True, exist_ok=True)
