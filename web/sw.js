@@ -9,7 +9,10 @@ const SHELL = [
 ];
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: "reload" skips the browser's own 10-minute cache, so a new release never saves old files.
+  event.waitUntil(caches.open(CACHE)
+    .then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", event => {
@@ -30,10 +33,13 @@ self.addEventListener("fetch", event => {
     return;
   }
   if (url.origin !== location.origin) return;
-  // App files: answer from cache instantly, refresh in the background.
+  // App files: always get the newest version when online (so a new look shows up right away);
+  // fall back to the saved copy when offline or if the network takes longer than 3 seconds.
   event.respondWith(caches.open(CACHE).then(async c => {
     const cached = await c.match(req, { ignoreSearch: req.mode === "navigate" });
-    const fresh = fetch(req).then(res => { if (res.ok) c.put(req, res.clone()); return res; }).catch(() => cached);
-    return cached || fresh;
+    const fresh = fetch(req, { cache: "no-cache" }).then(res => { if (res.ok) c.put(req, res.clone()); return res; });
+    if (!cached) return fresh;
+    const slow = new Promise(r => setTimeout(() => r(cached), 3000));
+    return Promise.race([fresh.catch(() => cached), slow]);
   }));
 });
