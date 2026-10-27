@@ -300,6 +300,7 @@ function friendly(error) {
   if (/already registered/i.test(m)) return "That email already has an account. Try logging in.";
   if (/rate limit/i.test(m)) return "Too many tries right now. Please wait a few minutes.";
   if (/Account cannot be created/i.test(m)) return "Sorry, you can't create an account right now.";
+  if (/Database error saving new user/i.test(m)) return "That username is taken or not allowed (3-20 characters, no spaces). Try another.";
   return m;
 }
 
