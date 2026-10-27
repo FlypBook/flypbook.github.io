@@ -16,11 +16,12 @@ const GENRES = ["aita", "tifu", "entitled people", "malicious compliance", "pett
 const ICON = {
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>',
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
-  heart: '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.1 5.2 3 1.6-1.9 3.1-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z"/></svg>',
-  comment: '<svg viewBox="0 0 24 24"><path d="M12 3C6.5 3 2 6.8 2 11.5c0 2.6 1.4 4.9 3.6 6.5L5 21.5l4.2-2.2c.9.2 1.8.3 2.8.3 5.5 0 10-3.8 10-8.5S17.5 3 12 3z"/></svg>',
-  save: '<svg viewBox="0 0 24 24"><path d="M6 2.5h12a1 1 0 0 1 1 1v18l-7-4.5-7 4.5v-18a1 1 0 0 1 1-1z"/></svg>',
-  share: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 4.5v4C6.6 9.3 3.5 13.6 3 19.5c2.3-3.4 5.3-5 10-5v4l8-7z"/></svg>',
-  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  // One hand-tuned line-icon set: 24px grid, 1.75 stroke, round joins.
+  heart: '<svg viewBox="0 0 24 24" class="ln"><path d="M12 20.2c-.3 0-.6-.1-.8-.3C7.6 17 3.5 13.8 3.5 9.6 3.5 7 5.4 5 7.9 5c1.6 0 3 .8 4.1 2.3C13.1 5.8 14.5 5 16.1 5c2.5 0 4.4 2 4.4 4.6 0 4.2-4.1 7.4-7.7 10.3-.2.2-.5.3-.8.3z"/></svg>',
+  comment: '<svg viewBox="0 0 24 24" class="ln"><path d="M20 11.6c0 3.9-3.6 7-8 7-1 0-2-.2-2.9-.5L4.5 19.5l1.2-3.6C4.6 14.7 4 13.2 4 11.6c0-3.9 3.6-7 8-7s8 3.1 8 7z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg>',
+  save: '<svg viewBox="0 0 24 24" class="ln"><path d="M7 3.8h10c.6 0 1 .4 1 1v15.4l-6-3.9-6 3.9V4.8c0-.6.4-1 1-1z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" class="ln"><path d="M12 15V3.8M8 7.6l4-3.8 4 3.8"/><path d="M6.5 11H5.8c-.7 0-1.3.6-1.3 1.3v6.4c0 .7.6 1.3 1.3 1.3h12.4c.7 0 1.3-.6 1.3-1.3v-6.4c0-.7-.6-1.3-1.3-1.3h-.7"/></svg>',
+  more: '<svg viewBox="0 0 24 24" class="ln"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01"/></svg>',
 };
 
 const app = document.getElementById("app");
@@ -318,7 +319,7 @@ filterChip.addEventListener("click", () => { state.filter = null; resetFeed().ca
 async function showReadyStories() {
   const ready = (acct().unread || []).filter(n => n.type === "story_ready" && n.story_id);
   if (!ready.length) return;
-  await openStory(ready[0].story_id, "✨ Your requested story is ready!");
+  await openStory(ready[0].story_id, "Your requested story is ready");
   acct().markRead?.(ready.map(n => n.id));
   toast("Your requested story is ready!");
 }
@@ -662,7 +663,7 @@ async function openDiscover() {
     const rows = await fetchStories("order=like_count.desc,created_at.desc&limit=10");
     top.replaceChildren(...rows.map(r => {
       const b = el("button", "list-item");
-      b.append(el("span", null, r.title), el("em", null, `♥ ${formatCount(r.like_count || 0)} · ${r.genre}`));
+      b.append(el("span", null, r.title), el("em", null, `${formatCount(r.like_count || 0)} likes · ${r.genre}`));
       b.addEventListener("click", () => openStory(r.id));
       return b;
     }));
@@ -780,7 +781,12 @@ function renderEndcard(story) {
   if (!d.question_prompt || !d.question_choices?.length) { box.append(el("strong", null, "The End"), next); return; }
   box.append(el("div", "q-label", "Quick question"), el("strong", "q-prompt", d.question_prompt));
   const choices = el("div", "q-choices");
-  d.question_choices.forEach((c, i) => { const b = el("button", "q-choice", c); b.addEventListener("click", () => answer(story, i)); choices.append(b); });
+  d.question_choices.forEach((c, i) => {
+    const b = el("button", "q-choice", c);
+    b.dataset.l = "ABCD"[i];
+    b.addEventListener("click", () => answer(story, i));
+    choices.append(b);
+  });
   box.append(choices, el("div", "q-result"), next);
   const prev = state.answered.get(d.id);
   if (prev && prev.answer_index != null) showAnswer(story, prev, null);
@@ -816,9 +822,9 @@ function showAnswer(story, res, choice) {
   });
   const r = box.querySelector(".q-result");
   r.replaceChildren();
-  r.append(el("strong", null, res.correct ? "Nice read! ✅" : "Not quite."));
+  r.append(el("strong", null, res.correct ? "Sharp reading. That's right." : "Not quite."));
   if (res.explanation) r.append(el("p", null, res.explanation));
-  if (user() && !res.already && res.gained) r.append(el("p", "q-points", `+${res.gained} points · ${res.streak}🔥 day streak`));
+  if (user() && !res.already && res.gained) r.append(el("p", "q-points", `+${res.gained} points · ${res.streak}-day streak`));
   else if (!user() && choice != null) {
     const join = el("button", "btn-link", "Sign up to earn points and streaks");
     join.addEventListener("click", () => needAccount("Create a free account to earn points and keep a reading streak."));
@@ -909,12 +915,12 @@ function maybeBreak() {
   const card = el("div", "card break-card");
   card.style.cssText = "position:absolute;inset:0;z-index:12;background:rgba(11,8,18,0.94)";
   const layer = el("div", "layer");
-  layer.append(el("div", null, "📚"), el("h2", null, "Nice reading streak!"),
+  layer.append(el("div", "break-kicker", `${BREAK_AFTER.stories} stories in`), el("h2", null, "Bookmark it here?"),
     el("p", null, "You've been reading for a while. Stretch, grab some water, or keep going. Your call."));
   const keep = el("button", "btn-primary", "Keep reading");
   const rest = el("button", "btn-secondary", "Take a break");
   keep.addEventListener("click", () => { card.remove(); breakShowing = false; startReading(); });
-  rest.addEventListener("click", () => { layer.replaceChildren(el("h2", null, "See you soon 👋"), el("p", null, "Your place is saved. Swipe up when you're back.")); setTimeout(() => { card.remove(); breakShowing = false; }, 2500); });
+  rest.addEventListener("click", () => { layer.replaceChildren(el("h2", null, "See you soon"), el("p", null, "Your place is saved. Swipe up when you're back.")); setTimeout(() => { card.remove(); breakShowing = false; }, 2500); });
   layer.append(keep, rest);
   card.append(layer);
   app.append(card);

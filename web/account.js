@@ -3,8 +3,29 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 
 const CONFIG = window.FLYPBOOK_CONFIG;
-const sb = createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+// Carry over a login saved under the library's default name, so nobody gets logged out by this update.
+try {
+  if (!localStorage.getItem("flypbook-login")) {
+    const old = Object.keys(localStorage).find(k => /^sb-.+-auth-token$/.test(k));
+    if (old) localStorage.setItem("flypbook-login", localStorage.getItem(old));
+  }
+} catch {}
+
+// Stay logged in: the session is saved on this device and refreshed automatically, so readers
+// only log in once (until they log out). The link in the confirmation email also signs them in.
+const sb = createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storageKey: "flypbook-login",
+    storage: window.localStorage,
+  },
+});
 window.sb = sb;
+
+// Ask the browser not to clear FlypBook's saved data (including the login) when space runs low.
+function keepLogin() { navigator.storage?.persist?.().catch(() => {}); }
 
 const GENRES = ["aita", "tifu", "entitled people", "malicious compliance", "petty revenge", "family drama",
   "friendship drama", "school drama", "workplace drama", "roommate drama", "wholesome twist", "mystery", "unexplained / eerie"];
@@ -59,6 +80,8 @@ async function refresh() {
 sb.auth.onAuthStateChange((event, session) => {
   const changed = (session?.user?.id || null) !== (acct.user?.id || null);
   acct.user = session?.user || null;
+  if (acct.user) keepLogin();
+  if (event === "SIGNED_IN" && /type=signup|access_token/.test(location.hash)) window.App?.toast("Email confirmed. You're signed in.");
   if (changed || event === "USER_UPDATED") refresh();
 });
 
@@ -148,8 +171,9 @@ function viewSignupDetails() {
       },
     });
     if (error) return msg(friendly(error), "error");
-    body.innerHTML = `<div class="sorry ok"><strong>Check your email!</strong>
-      <p>We sent a link to confirm your account. Open it on this device to start earning points and streaks.</p></div>`;
+    body.innerHTML = `<div class="sorry ok"><strong>Check your email</strong>
+      <p>We sent a link to confirm your account. Open it on this phone to finish signing up. You'll stay logged in after that.</p>
+      <p>Using FlypBook from your home screen on an iPhone? After confirming, open the app and log in once.</p></div>`;
   });
 }
 
@@ -170,8 +194,9 @@ function viewLogin() {
     msg("Logging in...");
     const { error } = await sb.auth.signInWithPassword({ email: body.querySelector("#li-email").value.trim(), password: body.querySelector("#li-pass").value });
     if (error) return msg(friendly(error), "error");
+    keepLogin();
     closeSheet();
-    window.App?.toast("Welcome back!");
+    window.App?.toast("Welcome back. You'll stay logged in on this device.");
   });
 }
 
@@ -198,7 +223,7 @@ async function viewProfile() {
   body.innerHTML = `
     <div class="stats">
       <div><b>${p.points}</b><span>points</span></div>
-      <div><b>${p.current_streak}🔥</b><span>day streak</span></div>
+      <div><b>${p.current_streak}</b><span>day streak</span></div>
       <div><b>${p.longest_streak}</b><span>best streak</span></div>
       <div><b>${LEVEL(p.reading_level)}</b><span>reading level</span></div>
     </div>
