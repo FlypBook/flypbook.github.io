@@ -343,7 +343,13 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
         try:
             with urllib.request.urlopen(request, timeout=120) as response:
                 data = json.loads(response.read().decode("utf-8"))
-            return json.loads(data["choices"][0]["message"]["content"])
+            result = json.loads(data["choices"][0]["message"]["content"])
+            # Some models wrap the object in a list; unwrap it. Anything else isn't usable.
+            if isinstance(result, list) and len(result) == 1:
+                result = result[0]
+            if not isinstance(result, dict):
+                raise json.JSONDecodeError("not a JSON object", "", 0)
+            return result
         except urllib.error.HTTPError as error:
             if error.code == 429 and attempt < 3:
                 wait = int(error.headers.get("retry-after", "10") or 10)
