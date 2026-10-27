@@ -58,9 +58,11 @@ function prepareStory(body) {
 }
 
 class Narrator {
-  constructor({ onWord, onEnd }) {
+  constructor({ onWord, onEnd, onBlocked }) {
     this.onWord = onWord;
     this.onEnd = onEnd;
+    this.onBlocked = onBlocked;  // the browser refused sound before the first tap
+    this.muted = false;
     this.token = 0;          // bumps on every stop, so stale callbacks are ignored
     this.timer = null;
     this.voice = null;
@@ -92,19 +94,26 @@ class Narrator {
   }
 
   /** Start reading `story` (from prepareStory) at word index `from`. */
-  play(story, from, { rate = 1, narration = true } = {}) {
+  play(story, from, { rate = 1, narration = true, muted = false } = {}) {
     this.stop();
     this.story = story;
     this.rate = rate;
     this.current = from;
+    this.muted = muted;
     const token = this.token;
     if (narration && story.audioUrl && story.times?.length === story.words.length) {
-      this.playAudio(from, token);
-    } else if (narration && this.supported) {
+      this.playAudio(from, token);            // muted audio still drives the word timing
+    } else if (narration && !muted && this.supported) {
       this.speakChunk(story.words[from].chunk, from, token);
     } else {
       this.runTimer(from, story.words.length - 1, token, true);
     }
+  }
+
+  /** Turn sound on/off without restarting (same audio element keeps playing in sync). */
+  setMuted(muted) {
+    this.muted = muted;
+    this.audio.muted = muted;
   }
 
   stop() {
@@ -125,9 +134,12 @@ class Narrator {
     a.preservesPitch = true;
     const seek = () => { if (Math.abs(a.currentTime - startAt) > 0.25) a.currentTime = startAt; };
     if (a.readyState >= 1) seek(); else a.addEventListener("loadedmetadata", seek, { once: true });
+    a.muted = this.muted;
     // play() runs right away (inside the tap) so phones allow the sound.
-    a.play().catch(() => {
+    a.play().catch(err => {
       if (token !== this.token) return;
+      // Sound isn't allowed until the first tap: let the app restart muted (allowed) instead.
+      if (err?.name === "NotAllowedError" && !this.muted && this.onBlocked) { this.onBlocked(); return; }
       // Audio failed to load or was blocked: fall back to the device voice.
       this.story = { ...this.story, audioUrl: null };
       this.play(this.story, this.current, { rate: this.rate, narration: true });

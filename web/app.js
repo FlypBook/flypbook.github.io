@@ -1,20 +1,26 @@
 // FlypBook: Scroll Like Shakespeare. Feed app.
-// Full-screen story cards with their own background video/animation (it swipes with the card),
-// a title card intro, narration with big karaoke captions, likes/share/report, an end-of-story
-// comprehension question, and a personalized For You feed for signed-in readers.
+// TikTok-inspired: full-screen cards that autoplay (muted until the first tap, as browsers require),
+// a right-side rail (like / comment / save / share), bottom-left info, a bottom nav, feed tabs, and a
+// comment drawer. Improvements: captions never sit under buttons, a scrubbable progress bar with time,
+// tap-to-pause stops EVERYTHING (voice + background), and gentle "take a break" reminders.
 
 const CONFIG = window.FLYPBOOK_CONFIG;
 const PAGE_SIZE = 10;
-const VIDEO_SHARE = 0.3;   // share of stories that get a real video clip (the rest get a gameplay-style scene)
-const EXPLORE_EVERY = 5;   // For You: every 5th story is a "something different" pick (about 20%)
+const VIDEO_SHARE = 0.3;     // share of stories that get a real video clip (the rest get a gameplay scene)
+const EXPLORE_EVERY = 5;     // For You: every 5th story is a "something different" pick (about 20%)
+const BREAK_AFTER = { stories: 15, minutes: 25 };
 const LEVEL_LABEL = { easy: "Easy read", medium: "Medium read", challenging: "Challenging" };
 const LEVEL_NUM = { easy: 1, medium: 2, challenging: 3 };
+const GENRES = ["aita", "tifu", "entitled people", "malicious compliance", "petty revenge", "family drama",
+  "friendship drama", "school drama", "workplace drama", "roommate drama", "wholesome twist", "mystery", "unexplained / eerie"];
 const ICON = {
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>',
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   heart: '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.1 5.2 3 1.6-1.9 3.1-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z"/></svg>',
-  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4M12 2v13"/></svg>',
-  flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4M4 4h13l-2 4 2 4H4"/></svg>',
+  comment: '<svg viewBox="0 0 24 24"><path d="M12 3C6.5 3 2 6.8 2 11.5c0 2.6 1.4 4.9 3.6 6.5L5 21.5l4.2-2.2c.9.2 1.8.3 2.8.3 5.5 0 10-3.8 10-8.5S17.5 3 12 3z"/></svg>',
+  save: '<svg viewBox="0 0 24 24"><path d="M6 2.5h12a1 1 0 0 1 1 1v18l-7-4.5-7 4.5v-18a1 1 0 0 1 1-1z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 4.5v4C6.6 9.3 3.5 13.6 3 19.5c2.3-3.4 5.3-5 10-5v4l8-7z"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
 };
 
 const app = document.getElementById("app");
@@ -22,26 +28,37 @@ const feed = document.getElementById("feed");
 const splash = document.getElementById("splash");
 const splashStatus = document.getElementById("splash-status");
 const settingsSheet = document.getElementById("settings");
+const unmuteBtn = document.getElementById("unmute");
+const commentsSheet = document.getElementById("comments");
+const discoverSheet = document.getElementById("discover");
+const filterChip = document.getElementById("filter-chip");
 
 const state = {
   stories: [],          // { data, prepared, card, els, word, ended, media }
   active: -1,
-  playing: false,       // the reader wants narration running (persists across swipes)
+  playing: true,        // autoplay: stories play unless the reader pauses
+  muted: false,         // set when the browser blocks sound before the first tap
   loading: false,
   done: false,
   videos: [],
   settings: loadSettings(),
-  mode: "latest",       // "latest" (guests) or "foryou" (signed in)
-  queue: [],            // For You: ranked stories not yet shown
-  feedUser: null,       // whose feed is built right now
+  tab: "foryou",        // "foryou" or "latest"
+  filter: null,         // a genre picked in Discover
+  mode: "latest",
+  queue: [],
+  feedUser: null,
   liked: new Set(),
+  saved: new Set(),
   reported: new Set(),
-  answered: new Map(),  // story id -> answer result
+  answered: new Map(),
+  viewed: 0,
+  lastBreak: Date.now(),
 };
 
 const narrator = new Narrator({
   onWord: i => showWord(state.stories[state.active], i),
   onEnd: () => endStory(state.stories[state.active]),
+  onBlocked: () => { setMuted(true); startReading(); },
 });
 
 const acct = () => window.Account || {};
@@ -49,23 +66,15 @@ const user = () => acct().user || null;
 
 // ---------- Settings (saved on this device only) ----------
 function loadSettings() {
-  const defaults = {
-    narration: "on",
-    rate: "1",
-    bg: matchMedia("(prefers-reduced-motion: reduce)").matches ? "dim" : "on",
-  };
+  const defaults = { narration: "on", rate: "1", bg: matchMedia("(prefers-reduced-motion: reduce)").matches ? "dim" : "on" };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem("flypbook-settings") || "{}") }; }
   catch { return defaults; }
 }
-function saveSettings() {
-  try { localStorage.setItem("flypbook-settings", JSON.stringify(state.settings)); } catch {}
-}
+function saveSettings() { try { localStorage.setItem("flypbook-settings", JSON.stringify(state.settings)); } catch {} }
 function applySettings() {
   app.dataset.bg = state.settings.bg;
   for (const seg of document.querySelectorAll("#settings .seg")) {
-    for (const b of seg.querySelectorAll("button")) {
-      b.setAttribute("aria-pressed", String(b.dataset.value === state.settings[seg.dataset.setting]));
-    }
+    for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.value === state.settings[seg.dataset.setting]));
   }
   updateMedia();
 }
@@ -73,12 +82,18 @@ document.querySelectorAll("#settings .seg").forEach(seg => seg.addEventListener(
   const b = e.target.closest("button");
   if (!b) return;
   state.settings[seg.dataset.setting] = b.dataset.value;
-  saveSettings();
-  applySettings();
-  if (seg.dataset.setting !== "bg" && state.playing) startReading();  // restart with new voice/speed
+  saveSettings(); applySettings();
+  if (seg.dataset.setting !== "bg" && state.playing) startReading();
 }));
-document.getElementById("settings-btn").addEventListener("click", () => { acct().close?.(); settingsSheet.hidden = !settingsSheet.hidden; });
+document.getElementById("settings-btn").addEventListener("click", () => { closeSheets(); settingsSheet.hidden = false; });
 document.getElementById("settings-close").addEventListener("click", () => { settingsSheet.hidden = true; });
+for (const s of [commentsSheet, discoverSheet]) s.querySelector("[data-close]").addEventListener("click", () => { s.hidden = true; });
+
+function closeSheets() {
+  settingsSheet.hidden = commentsSheet.hidden = discoverSheet.hidden = true;
+  acct().close?.();
+}
+const anySheetOpen = () => !settingsSheet.hidden || !commentsSheet.hidden || !discoverSheet.hidden || acct().isOpen?.();
 
 function toast(text) {
   const t = el("div", "toast", text);
@@ -86,6 +101,24 @@ function toast(text) {
   setTimeout(() => t.classList.add("out"), 2200);
   setTimeout(() => t.remove(), 2700);
 }
+
+// ---------- Sound: browsers only allow it after the first tap ----------
+function setMuted(m) {
+  state.muted = m;
+  narrator.setMuted(m);
+  unmuteBtn.hidden = !m;
+}
+let tapConsumedUntil = 0;
+function unmute() {
+  if (!state.muted) return;
+  setMuted(false);
+  tapConsumedUntil = Date.now() + 400;     // this tap turns sound on; it doesn't also pause
+  const s = state.stories[state.active];
+  // Restarting from the current word inside the tap lets phones allow the sound.
+  if (s && state.playing) narrator.play(s.prepared, Math.max(0, s.word), playOpts());
+}
+unmuteBtn.addEventListener("click", e => { e.stopPropagation(); unmute(); });
+document.addEventListener("pointerdown", () => { if (state.muted) unmute(); }, { capture: true });
 
 // ---------- Loading stories from Supabase ----------
 async function api(path, init) {
@@ -97,15 +130,11 @@ async function api(path, init) {
 }
 
 const BASE_FIELDS = "id,title,body,genre,tone,reading_level,est_read_seconds,requested_by,created_at,like_count,question_prompt,question_choices";
-let storyFields = BASE_FIELDS + ",audio_url,word_times";
-
+let optional = ["comment_count", "audio_url", "word_times"];   // newer columns; dropped if the database doesn't have them yet
 async function fetchStories(query) {
-  try {
-    return await api(`stories?select=${storyFields}&${query}`);
-  } catch (err) {
-    if (err.status !== 400 || storyFields === BASE_FIELDS) throw err;
-    storyFields = BASE_FIELDS;  // database doesn't have narration columns yet
-    return api(`stories?select=${storyFields}&${query}`);
+  for (;;) {
+    try { return await api(`stories?select=${[BASE_FIELDS, ...optional].join(",")}&${query}`); }
+    catch (err) { if (err.status !== 400 || !optional.length) throw err; optional = optional.slice(1); }
   }
 }
 
@@ -114,12 +143,13 @@ async function loadMore() {
   state.loading = true;
   try {
     let rows;
-    if (state.mode === "foryou") {
+    if (state.mode === "ranked") {
       rows = state.queue.splice(0, PAGE_SIZE);
       if (!state.queue.length) state.done = true;
     } else {
       const offset = state.stories.filter(s => !s.pinned).length;
-      rows = await fetchStories(`order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`);
+      const genre = state.filter ? `&genre=eq.${encodeURIComponent(state.filter)}` : "";
+      rows = await fetchStories(`order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}${genre}`);
       if (rows.length < PAGE_SIZE) state.done = true;
     }
     await addStories(rows.filter(r => !state.stories.some(s => s.data.id === r.id)));
@@ -166,20 +196,16 @@ async function openStory(id, banner) {
     state.stories.splice(i, 0, s);
     reindex();
   }
-  if (banner) state.stories[i].card.querySelector(".ready-banner")?.remove(), state.stories[i].card.append(el("div", "ready-banner", banner));
+  if (banner) { state.stories[i].card.querySelector(".ready-banner")?.remove(); state.stories[i].card.append(el("div", "ready-banner", banner)); }
+  closeSheets();
   feed.scrollTo({ top: i * feed.clientHeight, behavior: "smooth" });
   setTimeout(syncActiveFromScroll, 700);
 }
 
-function reindex() {
-  state.stories.forEach((s, i) => { s.card.dataset.index = i; });
-}
+function reindex() { state.stories.forEach((s, i) => { s.card.dataset.index = i; }); }
 
 async function loadVideos() {
-  try {
-    const res = await fetch("videos.json", { cache: "no-cache" });
-    if (res.ok) state.videos = await res.json();
-  } catch {}
+  try { const res = await fetch("videos.json", { cache: "no-cache" }); if (res.ok) state.videos = await res.json(); } catch {}
 }
 
 function hash(text) {
@@ -188,75 +214,92 @@ function hash(text) {
   return h >>> 0;
 }
 
-// ---------- For You: rank stories by what this reader engages with (no AI, runs on the phone) ----------
+// ---------- For You ranking (runs on the phone, no AI) ----------
 async function buildForYou() {
-  const sb = window.sb, me = user();
-  const [cands, likes, events, answers] = await Promise.all([
-    fetchStories("order=created_at.desc&limit=200"),
-    sb.from("likes").select("story_id"),
-    sb.from("story_events").select("story_id,event").limit(2000),
-    sb.from("answers").select("story_id,correct"),
-  ]);
+  const genre = state.filter ? `&genre=eq.${encodeURIComponent(state.filter)}` : "";
+  const cands = await fetchStories(`order=created_at.desc&limit=200${genre}`);
+  const aff = {}, finished = new Set(), now = Date.now();
   const byId = new Map(cands.map(s => [s.id, s]));
-  state.liked = new Set((likes.data || []).map(l => l.story_id));
-  const aff = {};
   const bump = (s, g, t) => { if (!s) return; aff["g:" + s.genre] = (aff["g:" + s.genre] || 0) + g; aff["t:" + s.tone] = (aff["t:" + s.tone] || 0) + t; };
-  for (const g of acct().profile?.favorite_genres || []) aff["g:" + g] = (aff["g:" + g] || 0) + 2;
-  for (const l of likes.data || []) bump(byId.get(l.story_id), 3, 1.5);
-  const finished = new Set();
-  for (const e of events.data || []) {
-    const s = byId.get(e.story_id);
-    if (e.event === "finish") { finished.add(e.story_id); bump(s, 2, 1); }
-    else if (e.event === "share") bump(s, 3, 1.5);
-    else if (e.event === "skip") bump(s, -1, -0.5);
+  let level = 1.6;
+  if (user()) {
+    const sb = window.sb;
+    const [likes, events, answers] = await Promise.all([
+      sb.from("likes").select("story_id"), sb.from("story_events").select("story_id,event").limit(2000), sb.from("answers").select("story_id,correct"),
+    ]);
+    for (const g of acct().profile?.favorite_genres || []) aff["g:" + g] = (aff["g:" + g] || 0) + 2;
+    for (const l of likes.data || []) bump(byId.get(l.story_id), 3, 1.5);
+    for (const e of events.data || []) {
+      const s = byId.get(e.story_id);
+      if (e.event === "finish") { finished.add(e.story_id); bump(s, 2, 1); }
+      else if (e.event === "share") bump(s, 3, 1.5);
+      else if (e.event === "skip") bump(s, -1, -0.5);
+    }
+    for (const a of answers.data || []) { if (a.correct) bump(byId.get(a.story_id), 0.5, 0.2); finished.add(a.story_id); }
+    level = acct().profile?.reading_level || level;
   }
-  for (const a of answers.data || []) { if (a.correct) bump(byId.get(a.story_id), 0.5, 0.2); finished.add(a.story_id); }
-  const level = acct().profile?.reading_level || 1.5, now = Date.now();
   const scored = cands.filter(s => !finished.has(s.id)).map(s => {
     const ageDays = (now - new Date(s.created_at)) / 864e5;
     const score = (aff["g:" + s.genre] || 0) + 0.5 * (aff["t:" + s.tone] || 0)
       + Math.max(0, 1 - Math.abs((LEVEL_NUM[s.reading_level] || 2) - level)) * 0.8   // near my reading level
       + Math.max(0, 1 - ageDays / 7)                                               // fresh
-      + Math.log1p(s.like_count || 0) * 0.3;                                        // popular
+      + Math.log1p((s.like_count || 0) + (s.comment_count || 0)) * 0.4;             // popular
     return { s, score };
   }).sort((a, b) => b.score - a.score);
-  // Mix in discovery: every EXPLORE_EVERY-th slot is a random pick from the lower-ranked half.
   const top = scored.map(x => x.s), queue = [];
   const tail = top.splice(Math.ceil(top.length / 2));
   for (let i = 0; top.length || tail.length; i++) {
     const explore = (i % EXPLORE_EVERY === EXPLORE_EVERY - 1 && tail.length) || !top.length;
     queue.push(explore ? tail.splice(Math.floor(Math.random() * tail.length), 1)[0] : top.shift());
   }
-  // Everything finished already? Show the newest again rather than an empty feed.
   return queue.length ? queue : cands;
 }
 
-/** Rebuild the whole feed (first load, or after logging in/out). */
+/** Rebuild the feed (first load, switching tabs/filters, logging in or out). */
 async function resetFeed() {
-  narrator.stop(); state.playing = false;
+  narrator.stop();
   state.stories.forEach(releaseMedia);
   state.stories = []; state.active = -1; state.done = false; state.queue = [];
   feed.replaceChildren(); feed.scrollTop = 0;
   state.feedUser = user()?.id || null;
-  state.mode = state.feedUser ? "foryou" : "latest";
-  if (state.mode === "foryou") {
-    try { state.queue = await buildForYou(); } catch (err) { console.error(err); state.mode = "latest"; }
-    const answers = await window.sb.from("answers").select("story_id,correct").then(r => r.data || []);
-    state.answered = new Map(answers.map(a => [a.story_id, a]));
-    const reports = await window.sb.from("reports").select("story_id").then(r => r.data || []);
-    state.reported = new Set(reports.map(r => r.story_id));
+  document.querySelectorAll(".feed-tabs button").forEach(b => b.setAttribute("aria-current", String(b.dataset.feed === state.tab)));
+  filterChip.hidden = !state.filter;
+  filterChip.textContent = state.filter ? `#${state.filter}  ✕` : "";
+  if (user()) {
+    const sb = window.sb;
+    const [likes, saves, answers, reports] = await Promise.all([
+      sb.from("likes").select("story_id"), sb.from("saves").select("story_id"),
+      sb.from("answers").select("story_id,correct"), sb.from("reports").select("story_id"),
+    ]);
+    state.liked = new Set((likes.data || []).map(r => r.story_id));
+    state.saved = new Set((saves.data || []).map(r => r.story_id));
+    state.answered = new Map((answers.data || []).map(a => [a.story_id, a]));
+    state.reported = new Set((reports.data || []).map(r => r.story_id));
   } else {
-    state.liked = new Set(); state.answered = new Map(); state.reported = new Set();
+    state.liked = new Set(); state.saved = new Set(); state.answered = new Map(); state.reported = new Set();
+  }
+  state.mode = state.tab === "foryou" ? "ranked" : "latest";
+  if (state.mode === "ranked") {
+    try { state.queue = await buildForYou(); } catch (err) { console.error(err); state.mode = "latest"; }
   }
   const shared = new URLSearchParams(location.search).get("story");  // share links: ?story=<id>
-  if (shared && /^[0-9a-f-]{36}$/i.test(shared)) await addStories(await fetchStories(`id=eq.${shared}`), true);
+  if (shared && /^[0-9a-f-]{36}$/i.test(shared) && !state.sharedShown) {
+    state.sharedShown = true;
+    await addStories(await fetchStories(`id=eq.${shared}`), true);
+  }
   await loadMore();
   if (!state.stories.length) addMessageCard("No stories yet", "The first stories are on their way. Check back soon.");
+  state.playing = true;
   syncActiveFromScroll();
   showReadyStories();
 }
 
-/** "Your story is ready": pin the newest finished request to the top of the feed. */
+document.querySelectorAll(".feed-tabs button").forEach(b => b.addEventListener("click", () => {
+  if (state.tab === b.dataset.feed) { feed.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  state.tab = b.dataset.feed; resetFeed().catch(showError);
+}));
+filterChip.addEventListener("click", () => { state.filter = null; resetFeed().catch(showError); });
+
 async function showReadyStories() {
   const ready = (acct().unread || []).filter(n => n.type === "story_ready" && n.story_id);
   if (!ready.length) return;
@@ -272,78 +315,112 @@ function el(tag, cls, text) {
   if (text != null) e.textContent = text;
   return e;
 }
+const minutes = s => `${Math.max(1, Math.round(s / 60))} min`;
+const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 function buildCard(story) {
   const d = story.data;
   const card = el("article", "card");
-
   const media = el("div", "media");
   const scrim = el("div", "scrim");
-  const progress = el("div", "progress");
-  const bar = el("i");
-  progress.append(bar);
-
   const layer = el("div", "layer");
 
-  // Title card
+  // Opening title card (shows for the first few seconds of each story)
   const tc = el("div", "titlecard");
   const head = el("div", "tc-head");
-  const avatar = el("div", "avatar", d.username ? d.username[0].toUpperCase() : "F");
+  head.append(el("div", "avatar", d.username ? d.username[0].toUpperCase() : "F"));
   const who = el("div", "tc-who");
   who.append(el("strong", null, d.username ? "@" + d.username : "FlypBook Stories"));
-  const sub = el("span");
-  if (d.username) sub.append("requested this · ");
-  sub.append(`${Math.max(1, Math.round(d.est_read_seconds / 60))} min story`);
-  who.append(sub);
-  head.append(avatar, who);
+  who.append(el("span", null, `${d.username ? "requested this · " : ""}${minutes(d.est_read_seconds)} story`));
+  head.append(who);
   const tags = el("div", "tc-tags");
-  tags.append(el("span", "tag", d.genre), el("span", "tag", LEVEL_LABEL[d.reading_level] || d.reading_level),
-              el("span", "tag ai", "AI-generated"));
+  tags.append(el("span", "tag", d.genre), el("span", "tag", LEVEL_LABEL[d.reading_level] || d.reading_level), el("span", "tag ai", "AI-generated"));
   tc.append(head, el("h2", "tc-title", d.title), tags);
-
-  const mini = el("div", "mini");
-  mini.append(el("span", "tag ai", "AI"), el("span", null, d.title));
-
   const captions = el("div", "captions");
-  const cta = el("div", "cta");
-  cta.innerHTML = ICON.play;
-  cta.append("Tap to read along");
-  layer.append(tc, mini, captions, cta);
+  layer.append(tc, captions);
+
+  // Bottom-left info (TikTok style)
+  const info = el("div", "info");
+  info.append(el("div", "who", d.username ? "@" + d.username : "@FlypBook"));
+  info.append(el("div", "ttl", d.title));
+  info.append(el("div", "tags", `#${d.genre.replace(/[^a-z]+/gi, "")} #${d.tone} #storytime`));
+  const meta = el("div", "meta");
+  meta.append(el("span", "ai", "AI story"), el("span", null, `♪ ${minutes(d.est_read_seconds)} narrated read`));
+  info.append(meta);
 
   const playmark = el("div", "playmark");
   playmark.innerHTML = ICON.play;
 
-  // Like / share / report rail
+  // Right rail
   const rail = el("div", "rail");
-  const likeBtn = railButton(ICON.heart, d.like_count || 0, "Like");
-  likeBtn.classList.add("like");
-  const shareBtn = railButton(ICON.share, "Share", "Share");
-  const reportBtn = railButton(ICON.flag, "Report", "Report this story");
-  rail.append(likeBtn, shareBtn, reportBtn);
-  likeBtn.addEventListener("click", e => { e.stopPropagation(); toggleLike(story); });
-  shareBtn.addEventListener("click", e => { e.stopPropagation(); shareStory(story); });
-  reportBtn.addEventListener("click", e => { e.stopPropagation(); reportStory(story); });
+  const av = el("button", "avatar-btn", d.username ? d.username[0].toUpperCase() : "F");
+  av.setAttribute("aria-label", "Storyteller");
+  const likeBtn = railButton(ICON.heart, d.like_count || 0, "Like", "like");
+  const commentBtn = railButton(ICON.comment, d.comment_count || 0, "Comments", "comment");
+  const saveBtn = railButton(ICON.save, "Save", "Save", "save");
+  const shareBtn = railButton(ICON.share, "Share", "Share", "share");
+  const moreBtn = railButton(ICON.more, "", "More options", "more");
+  rail.append(av, likeBtn, commentBtn, saveBtn, shareBtn, moreBtn);
+  const stop = fn => e => { e.stopPropagation(); fn(); };
+  likeBtn.addEventListener("click", stop(() => toggleLike(story)));
+  commentBtn.addEventListener("click", stop(() => openComments(story)));
+  saveBtn.addEventListener("click", stop(() => toggleSave(story)));
+  shareBtn.addEventListener("click", stop(() => shareStory(story)));
+  moreBtn.addEventListener("click", stop(() => reportStory(story)));
+  av.addEventListener("click", stop(() => toast(d.username ? `Requested by @${d.username}` : "Written by FlypBook's AI storyteller")));
+
+  // Scrubbable progress bar + time readout
+  const scrub = el("div", "scrub");
+  const track = el("div", "track"), fill = el("div", "fill"), knob = el("div", "knob");
+  track.append(fill, knob); scrub.append(track);
+  const scrubTime = el("div", "scrub-time");
+  wireScrub(story, scrub, scrubTime);
 
   const endcard = el("div", "endcard");
   endcard.addEventListener("click", e => e.stopPropagation());
-
   const credit = el("div", "credit-line");
 
-  card.append(media, scrim, progress, layer, playmark, rail, endcard, credit);
-  card.addEventListener("click", () => togglePlay(story));
+  card.append(media, scrim, layer, info, playmark, rail, scrub, scrubTime, endcard, credit);
+  wireTaps(story, card);
   story.card = card;
-  story.els = { media, captions, bar, credit, endcard, likeBtn };
+  story.els = { media, captions, fill, knob, credit, endcard, likeBtn, commentBtn, saveBtn };
   story.page = -1;
   observer.observe(card);
-  refreshLike(story);
+  refreshRail(story);
 }
 
-function railButton(icon, label, aria) {
-  const b = el("button", "rail-btn");
+function railButton(icon, label, aria, cls) {
+  const b = el("button", `rail-btn ${cls}`);
   b.setAttribute("aria-label", aria);
   b.innerHTML = icon;
   b.append(el("span", null, String(label)));
   return b;
+}
+
+/** Single tap = pause/play everything. Double tap = like (with a heart burst). */
+function wireTaps(story, card) {
+  let last = 0, timer;
+  card.addEventListener("click", e => {
+    if (Date.now() < tapConsumedUntil) return;           // that tap turned the sound on
+    if (anySheetOpen()) { closeSheets(); return; }
+    const now = Date.now();
+    if (now - last < 280) {
+      clearTimeout(timer); last = 0;
+      burstHeart(card, e);
+      if (!state.liked.has(story.data.id)) toggleLike(story);
+      return;
+    }
+    last = now;
+    timer = setTimeout(() => togglePlay(story), 260);
+  });
+}
+function burstHeart(card, e) {
+  const r = card.getBoundingClientRect();
+  const h = el("div", "heart-burst");
+  h.innerHTML = ICON.heart;
+  h.style.left = `${e.clientX - r.left}px`; h.style.top = `${e.clientY - r.top}px`;
+  card.append(h);
+  setTimeout(() => h.remove(), 850);
 }
 
 function addMessageCard(title, text) {
@@ -354,35 +431,84 @@ function addMessageCard(title, text) {
   card.append(layer);
   feed.append(card);
 }
-
 function insertCard(card) {
   const msg = feed.querySelector(".message-card");
   if (msg) feed.insertBefore(card, msg); else feed.append(card);
 }
 
-// ---------- Likes, sharing, reporting ----------
-function needAccount(reason) {
-  acct().open ? acct().open("signup", { reason }) : toast(reason);
+// ---------- Scrubbing ----------
+function storySeconds(story) {
+  const t = story.prepared.times;
+  return t?.length ? t[t.length - 1] / 1000 + 1 : story.data.est_read_seconds;
+}
+function wordAtFraction(story, f) {
+  const t = story.prepared.times, n = story.prepared.words.length;
+  if (!t?.length) return Math.min(n - 1, Math.max(0, Math.round(f * (n - 1))));
+  const ms = f * t[t.length - 1];
+  let i = 0; while (i < n - 1 && t[i + 1] <= ms) i++;
+  return i;
+}
+function wireScrub(story, scrub, label) {
+  let dragging = false;
+  const at = e => { const r = scrub.getBoundingClientRect(); return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); };
+  const show = f => {
+    const i = wordAtFraction(story, f);
+    story.word = i; showWord(story, i);
+    label.textContent = `${clock(f * storySeconds(story))} / ${clock(storySeconds(story))}`;
+  };
+  scrub.addEventListener("pointerdown", e => {
+    e.stopPropagation(); dragging = true; scrub.setPointerCapture(e.pointerId);
+    scrub.classList.add("active"); story.card.classList.add("scrubbing", "reading");
+    narrator.stop(); show(at(e));
+  });
+  scrub.addEventListener("pointermove", e => { if (dragging) show(at(e)); });
+  const end = e => {
+    if (!dragging) return;
+    dragging = false; scrub.classList.remove("active"); story.card.classList.remove("scrubbing");
+    if (story.ended) { story.ended = false; story.card.classList.remove("ended"); }
+    state.playing = true; startReading();
+  };
+  scrub.addEventListener("pointerup", end);
+  scrub.addEventListener("pointercancel", end);
+  scrub.addEventListener("click", e => e.stopPropagation());
 }
 
-function refreshLike(story) {
-  const on = state.liked.has(story.data.id);
-  story.els.likeBtn.classList.toggle("on", on);
-  story.els.likeBtn.querySelector("span").textContent = formatCount(story.data.like_count || 0);
-}
+// ---------- Likes, saves, sharing, reporting ----------
+function needAccount(reason) { acct().open ? acct().open("signup", { reason }) : toast(reason); }
 const formatCount = n => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n));
+
+function refreshRail(story) {
+  const id = story.data.id;
+  story.els.likeBtn.classList.toggle("on", state.liked.has(id));
+  story.els.likeBtn.querySelector("span").textContent = formatCount(story.data.like_count || 0);
+  story.els.commentBtn.querySelector("span").textContent = formatCount(story.data.comment_count || 0);
+  story.els.saveBtn.classList.toggle("on", state.saved.has(id));
+  story.els.saveBtn.querySelector("span").textContent = state.saved.has(id) ? "Saved" : "Save";
+}
 
 async function toggleLike(story) {
   if (!user()) return needAccount("Create a free account to like stories and build your For You feed.");
   const id = story.data.id, on = !state.liked.has(id);
   on ? state.liked.add(id) : state.liked.delete(id);
   story.data.like_count = Math.max(0, (story.data.like_count || 0) + (on ? 1 : -1));
-  refreshLike(story);
+  refreshRail(story);
   if (on) story.els.likeBtn.animate([{ transform: "scale(1)" }, { transform: "scale(1.35)" }, { transform: "scale(1)" }], { duration: 320 });
   const q = on ? window.sb.from("likes").insert({ user_id: user().id, story_id: id })
                : window.sb.from("likes").delete().eq("user_id", user().id).eq("story_id", id);
   const { error } = await q;
   if (error && !/duplicate/i.test(error.message)) toast("Couldn't save that like. Try again.");
+}
+
+async function toggleSave(story) {
+  if (!user()) return needAccount("Create a free account to save stories for later.");
+  const id = story.data.id, on = !state.saved.has(id);
+  on ? state.saved.add(id) : state.saved.delete(id);
+  refreshRail(story);
+  toast(on ? "Saved to your profile" : "Removed from saved");
+  const q = on ? window.sb.from("saves").insert({ user_id: user().id, story_id: id })
+               : window.sb.from("saves").delete().eq("user_id", user().id).eq("story_id", id);
+  const { error } = await q;
+  if (error && !/duplicate/i.test(error.message)) toast("Couldn't save that. Try again.");
 }
 
 async function shareStory(story) {
@@ -398,10 +524,10 @@ async function shareStory(story) {
 function reportStory(story) {
   if (!user()) return needAccount("Create a free account to report stories.");
   if (state.reported.has(story.data.id)) return toast("You already reported this story.");
+  story.card.querySelector(".report-box")?.remove();
   const box = el("div", "report-box");
   box.innerHTML = `<strong>Report this story?</strong><p>It will be hidden while we review it.</p>`;
-  const reasons = ["Inappropriate content", "Hateful or bullying", "Doesn't make sense", "Something else"];
-  for (const r of reasons) {
+  for (const r of ["Inappropriate content", "Hateful or bullying", "Doesn't make sense", "Something else"]) {
     const b = el("button", "btn-secondary", r);
     b.addEventListener("click", async e => {
       e.stopPropagation();
@@ -409,7 +535,7 @@ function reportStory(story) {
       box.remove();
       if (error && !/duplicate/i.test(error.message)) return toast("Couldn't send the report. Try again.");
       state.reported.add(story.data.id);
-      narrator.stop(); state.playing = false;
+      pauseReading();
       story.card.classList.add("reported");
       story.card.append(el("div", "reported-note", "Thanks for reporting. This story is hidden while we review it. Swipe up to keep reading."));
     });
@@ -422,7 +548,6 @@ function reportStory(story) {
   story.card.append(box);
 }
 
-// Reading signals for the For You feed (signed-in readers only).
 function logEvent(story, event, progress) {
   if (!user() || !window.sb) return;
   story.logged = story.logged || new Set();
@@ -431,12 +556,113 @@ function logEvent(story, event, progress) {
   window.sb.from("story_events").insert({ user_id: user().id, story_id: story.data.id, event, progress }).then(() => {});
 }
 
+// ---------- Comments ----------
+let commentStory = null;
+const commentList = document.getElementById("comments-list");
+const commentForm = document.getElementById("comment-form");
+const commentInput = document.getElementById("comment-input");
+const timeAgo = t => {
+  const s = (Date.now() - new Date(t)) / 1000;
+  return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`;
+};
+
+async function openComments(story) {
+  closeSheets();
+  commentStory = story;
+  commentsSheet.hidden = false;
+  document.getElementById("comments-title").textContent = `${formatCount(story.data.comment_count || 0)} comments`;
+  commentList.innerHTML = `<p class="fine">Loading...</p>`;
+  commentForm.hidden = false;
+  commentInput.placeholder = user() ? "Add a comment..." : "Log in to comment";
+  let rows = [];
+  try { rows = await api(`comment_feed?select=*&story_id=eq.${story.data.id}&order=created_at.desc&limit=100`); }
+  catch { commentList.innerHTML = `<p class="fine">Comments are coming soon.</p>`; return; }
+  if (commentStory !== story) return;
+  commentList.replaceChildren();
+  if (!rows.length) commentList.append(el("p", "fine", "No comments yet. Be the first!"));
+  rows.forEach(c => commentList.append(commentRow(c)));
+}
+
+function commentRow(c) {
+  const row = el("div", "cmt");
+  row.append(el("div", "av", (c.username || "?")[0].toUpperCase()));
+  const mid = el("div");
+  mid.append(el("div", "nm", `@${c.username} · ${timeAgo(c.created_at)}`), el("div", "tx", c.body));
+  const act = el("button", "act", user()?.id === c.user_id ? "Delete" : "Report");
+  act.addEventListener("click", () => commentAction(c, row, act.textContent));
+  row.append(mid, act);
+  return row;
+}
+
+async function commentAction(c, row, kind) {
+  if (!user()) return needAccount("Create a free account to report comments.");
+  const sb = window.sb;
+  const { error } = kind === "Delete"
+    ? await sb.from("comments").delete().eq("id", c.id)
+    : await sb.from("comment_reports").insert({ comment_id: c.id, user_id: user().id, reason: "reported in app" });
+  if (error && !/duplicate/i.test(error.message)) return toast("Couldn't do that. Try again.");
+  row.remove();
+  if (commentStory) { commentStory.data.comment_count = Math.max(0, (commentStory.data.comment_count || 1) - 1); refreshRail(commentStory); }
+  toast(kind === "Delete" ? "Comment deleted" : "Thanks! That comment is hidden for review.");
+}
+
+commentInput.addEventListener("focus", () => { if (!user()) { commentInput.blur(); needAccount("Create a free account to join the conversation."); } });
+commentForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  const body = commentInput.value.trim();
+  if (!body || !commentStory) return;
+  if (!user()) return needAccount("Create a free account to join the conversation.");
+  const btn = commentForm.querySelector("button"); btn.disabled = true;
+  const { data, error } = await window.sb.from("comments").insert({ story_id: commentStory.data.id, user_id: user().id, body }).select().single();
+  btn.disabled = false;
+  if (error) return toast(error.message.replace(/^.*?: /, ""));
+  commentInput.value = "";
+  commentList.querySelector(".fine")?.remove();
+  commentList.prepend(commentRow({ ...data, username: acct().profile?.username || "you" }));
+  commentStory.data.comment_count = (commentStory.data.comment_count || 0) + 1;
+  refreshRail(commentStory);
+  document.getElementById("comments-title").textContent = `${formatCount(commentStory.data.comment_count)} comments`;
+});
+
+// ---------- Discover ----------
+async function openDiscover() {
+  closeSheets();
+  discoverSheet.hidden = false;
+  const chips = document.getElementById("discover-genres");
+  chips.replaceChildren(...GENRES.map(g => {
+    const b = el("button", "chip-btn", g);
+    b.setAttribute("aria-pressed", String(state.filter === g));
+    b.addEventListener("click", () => { state.filter = state.filter === g ? null : g; discoverSheet.hidden = true; resetFeed().catch(showError); });
+    return b;
+  }));
+  const top = document.getElementById("discover-top");
+  try {
+    const rows = await fetchStories("order=like_count.desc,created_at.desc&limit=10");
+    top.replaceChildren(...rows.map(r => {
+      const b = el("button", "list-item");
+      b.append(el("span", null, r.title), el("em", null, `♥ ${formatCount(r.like_count || 0)} · ${r.genre}`));
+      b.addEventListener("click", () => openStory(r.id));
+      return b;
+    }));
+  } catch { top.innerHTML = `<p class="fine">Couldn't load top stories.</p>`; }
+}
+
+// ---------- Bottom navigation ----------
+document.querySelectorAll("#bottomnav button").forEach(b => b.addEventListener("click", () => {
+  const nav = b.dataset.nav;
+  if (nav === "home") { const wasOpen = anySheetOpen(); closeSheets(); if (!wasOpen) feed.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  if (nav === "discover") return openDiscover();
+  closeSheets();
+  if (nav === "create") return acct().open?.(user() ? "request" : "signup", { reason: "Create an account to request your own stories." });
+  if (nav === "inbox") return acct().open?.(user() ? "notifications" : "signup", { reason: "Create an account to get notified when your stories are ready." });
+  if (nav === "me") return acct().open?.(user() ? "profile" : "signup");
+}));
+
 // ---------- Background media (lives inside each card) ----------
 function pickVideo(story) {
   if (story.noVideo || !state.videos.length || (story.seed % 100) / 100 >= VIDEO_SHARE) return null;
   return state.videos[Math.floor(story.seed / 100) % state.videos.length];
 }
-
 function ensureMedia(story) {
   if (story.media) return;
   const video = pickVideo(story);
@@ -447,7 +673,6 @@ function ensureMedia(story) {
     v.preload = "metadata";
     if (video.poster) v.poster = video.poster;
     v.src = video.url;
-    // If the video can't load, swap in a code-drawn scene.
     v.addEventListener("error", () => { releaseMedia(story); story.noVideo = true; ensureMedia(story); updateMedia(); }, { once: true });
     story.els.media.append(v);
     story.media = { kind: "video", el: v };
@@ -462,7 +687,6 @@ function ensureMedia(story) {
     story.media = { kind: "scene", el: c, renderer: new SceneRenderer(c, story.seed) };
   }
 }
-
 function releaseMedia(story) {
   if (!story.media) return;
   if (story.media.kind === "video") { story.media.el.removeAttribute("src"); story.media.el.load(); }
@@ -471,20 +695,16 @@ function releaseMedia(story) {
   story.els.credit.replaceChildren();
   story.media = null;
 }
-
-/** Keep media only on the visible card and its neighbors; animate only the visible one. */
+/** Media only on the visible card and its neighbors. Only the visible one moves, and only while playing. */
 function updateMedia() {
   const on = state.settings.bg !== "off";
   state.stories.forEach((story, i) => {
     const near = Math.abs(i - state.active) <= 1;
     if (!near || !on) { releaseMedia(story); return; }
     ensureMedia(story);
-    const m = story.media;
-    if (i === state.active) {
-      if (m.kind === "video") m.el.play().catch(() => {});
-      else m.renderer.start();
-    } else if (m.kind === "video") m.el.pause();
-    else m.renderer.stop();
+    const m = story.media, live = i === state.active && state.playing && !document.hidden;
+    if (m.kind === "video") live ? m.el.play().catch(() => {}) : m.el.pause();
+    else live ? m.renderer.start() : m.renderer.stop();
   });
 }
 
@@ -503,7 +723,6 @@ function renderPage(story, pageIndex) {
   }
   story.els.captions.replaceChildren(p);
 }
-
 function showWord(story, i) {
   if (!story) return;
   const { words } = story.prepared;
@@ -515,7 +734,9 @@ function showWord(story, i) {
     s.classList.toggle("now", n === i);
     s.classList.toggle("next", n > i);
   }
-  story.els.bar.style.width = `${((i + 1) / words.length) * 100}%`;
+  const f = (i + 1) / words.length;
+  story.els.fill.style.width = `${f * 100}%`;
+  story.els.knob.style.left = `${f * 100}%`;
 }
 
 // ---------- End of story: the comprehension question ----------
@@ -527,30 +748,20 @@ function endStory(story) {
   logEvent(story, "finish", 1);
   renderEndcard(story);
 }
-
 function renderEndcard(story) {
   const d = story.data, box = story.els.endcard;
-  box.replaceChildren();
+  box.replaceChildren(); box.classList.remove("answered");
   const next = el("span", "next-hint");
   next.innerHTML = ICON.up;
   next.append("Swipe up for the next story");
-  if (!d.question_prompt || !d.question_choices?.length) {
-    box.append(el("strong", null, "The End"), next);
-    return;
-  }
+  if (!d.question_prompt || !d.question_choices?.length) { box.append(el("strong", null, "The End"), next); return; }
   box.append(el("div", "q-label", "Quick question"), el("strong", "q-prompt", d.question_prompt));
   const choices = el("div", "q-choices");
-  d.question_choices.forEach((c, i) => {
-    const b = el("button", "q-choice", c);
-    b.addEventListener("click", () => answer(story, i));
-    choices.append(b);
-  });
-  const result = el("div", "q-result");
-  box.append(choices, result, next);
+  d.question_choices.forEach((c, i) => { const b = el("button", "q-choice", c); b.addEventListener("click", () => answer(story, i)); choices.append(b); });
+  box.append(choices, el("div", "q-result"), next);
   const prev = state.answered.get(d.id);
   if (prev && prev.answer_index != null) showAnswer(story, prev, null);
 }
-
 async function answer(story, choice) {
   const box = story.els.endcard;
   if (box.classList.contains("answered")) return;
@@ -566,14 +777,12 @@ async function answer(story, choice) {
       res = await api("rpc/check_answer", { method: "POST", body: JSON.stringify({ p_story: story.data.id, p_choice: choice }) });
     }
   } catch (err) {
-    console.error(err);
-    box.classList.remove("answered");
+    console.error(err); box.classList.remove("answered");
     return toast("Couldn't check that answer. Try again.");
   }
   state.answered.set(story.data.id, res);
   showAnswer(story, res, choice);
 }
-
 function showAnswer(story, res, choice) {
   const box = story.els.endcard;
   box.classList.add("answered");
@@ -594,36 +803,34 @@ function showAnswer(story, res, choice) {
   }
 }
 
-// ---------- Playback ----------
+// ---------- Playback: pause/play controls the voice AND the background together ----------
+const playOpts = () => ({ rate: Number(state.settings.rate), narration: state.settings.narration === "on", muted: state.muted });
+
 function startReading() {
   const story = state.stories[state.active];
-  if (!story || story.card.classList.contains("reported")) return;
-  if (story.ended) {  // replay from the start
-    story.ended = false;
-    story.card.classList.remove("ended");
-    story.word = -1;
-  }
-  story.card.classList.add("started");
+  if (!story || story.card.classList.contains("reported") || breakShowing) return;
+  if (story.ended) { story.ended = false; story.card.classList.remove("ended"); story.word = -1; }
+  state.playing = true;
+  story.card.classList.add("reading");
   story.card.classList.remove("paused");
-  story.startedAt = story.startedAt || Date.now();
-  narrator.play(story.prepared, Math.max(0, story.word), {
-    rate: Number(state.settings.rate),
-    narration: state.settings.narration === "on",
-  });
+  if (!story.startedAt) {
+    story.startedAt = Date.now();
+    setTimeout(() => story.card.classList.add("intro-done"), 3500);   // title card, then just captions
+  }
+  narrator.play(story.prepared, Math.max(0, story.word), playOpts());
+  updateMedia();
 }
-
 function pauseReading() {
+  state.playing = false;
   narrator.stop();
   const story = state.stories[state.active];
-  if (story && story.card.classList.contains("started") && !story.ended) story.card.classList.add("paused");
+  if (story && !story.ended) story.card.classList.add("paused");
+  updateMedia();
 }
-
 function togglePlay(story) {
-  if (!settingsSheet.hidden) { settingsSheet.hidden = true; return; }
-  if (acct().isOpen?.()) { acct().close(); return; }
   if (state.stories[state.active] !== story) return;
-  state.playing = !state.playing || story.ended;
-  if (state.playing) startReading(); else pauseReading();
+  if (story.ended) return startReading();
+  state.playing ? pauseReading() : startReading();
 }
 
 function setActive(index) {
@@ -632,48 +839,59 @@ function setActive(index) {
   if (prev) {
     narrator.stop();
     prev.card.classList.remove("paused");
-    // Swiped away early? That's a "skip" signal for the For You feed.
     const progress = prev.word > 0 ? prev.word / prev.prepared.words.length : 0;
     if (!prev.ended && prev.startedAt && progress < 0.3) logEvent(prev, "skip", progress);
   }
   state.active = index;
+  state.viewed++;
+  state.playing = true;                    // like TikTok: the next story just plays
+  if (maybeBreak()) return;
   updateMedia();
-  if (state.playing) startReading();
+  startReading();
   if (index >= state.stories.length - 3) loadMore().catch(showError);
 }
 
 const observer = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting) setActive(Number(e.target.dataset.index));
 }, { root: feed, threshold: 0.6 });
-
-// Backup for the observer: work out the visible card from the scroll position.
 let scrollTimer;
-feed.addEventListener("scroll", () => {
-  clearTimeout(scrollTimer);
-  scrollTimer = setTimeout(syncActiveFromScroll, 120);
-});
+feed.addEventListener("scroll", () => { clearTimeout(scrollTimer); scrollTimer = setTimeout(syncActiveFromScroll, 120); });
 function syncActiveFromScroll() {
   const i = Math.round(feed.scrollTop / Math.max(1, feed.clientHeight));
   if (i >= 0 && i < state.stories.length) setActive(i);
+}
+
+// ---------- "Take a break?" (healthier than endless scrolling) ----------
+let breakShowing = false;
+function maybeBreak() {
+  const mins = (Date.now() - state.lastBreak) / 60000;
+  if (state.viewed < BREAK_AFTER.stories && mins < BREAK_AFTER.minutes) return false;
+  state.viewed = 0; state.lastBreak = Date.now();
+  breakShowing = true;
+  narrator.stop(); state.playing = false; updateMedia();
+  const card = el("div", "card break-card");
+  card.style.cssText = "position:absolute;inset:0;z-index:12;background:rgba(11,8,18,0.94)";
+  const layer = el("div", "layer");
+  layer.append(el("div", null, "📚"), el("h2", null, "Nice reading streak!"),
+    el("p", null, "You've been reading for a while. Stretch, grab some water, or keep going. Your call."));
+  const keep = el("button", "btn-primary", "Keep reading");
+  const rest = el("button", "btn-secondary", "Take a break");
+  keep.addEventListener("click", () => { card.remove(); breakShowing = false; startReading(); });
+  rest.addEventListener("click", () => { layer.replaceChildren(el("h2", null, "See you soon 👋"), el("p", null, "Your place is saved. Swipe up when you're back.")); setTimeout(() => { card.remove(); breakShowing = false; }, 2500); });
+  layer.append(keep, rest);
+  card.append(layer);
+  app.append(card);
+  return true;
 }
 
 // Keyboard (computers): space = play/pause, arrows = next/previous story
 document.addEventListener("keydown", e => {
   if (e.target.closest?.("button, input, textarea, select")) return;
   if (e.key === " ") { e.preventDefault(); const s = state.stories[state.active]; if (s) togglePlay(s); }
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-    e.preventDefault();
-    feed.scrollBy({ top: (e.key === "ArrowDown" ? 1 : -1) * feed.clientHeight, behavior: "smooth" });
-  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); feed.scrollBy({ top: (e.key === "ArrowDown" ? 1 : -1) * feed.clientHeight, behavior: "smooth" }); }
 });
-
-// Leaving the app pauses reading and videos.
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    if (state.playing) { state.playing = false; pauseReading(); }
-    state.stories.forEach(s => s.media?.kind === "video" && s.media.el.pause());
-  } else updateMedia();
-});
+// Leaving the app pauses everything.
+document.addEventListener("visibilitychange", () => { if (document.hidden && state.playing) pauseReading(); });
 
 function showError(err) {
   console.error(err);
@@ -693,9 +911,8 @@ function showInstall() {
   if (installPrompt) {
     btn.hidden = false; hint.hidden = true;
     btn.onclick = async () => { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; installRow.hidden = true; };
-  } else if (isIOS) {
-    btn.hidden = true; hint.hidden = false;
-  } else installRow.hidden = true;
+  } else if (isIOS) { btn.hidden = true; hint.hidden = false; }
+  else installRow.hidden = true;
 }
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -703,28 +920,26 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
 
 // Hooks for account.js
 window.App = {
-  toast,
-  openStory,
+  toast, openStory,
   onAuth(_acct, opts = {}) {
-    const id = user()?.id || null;
     if (!state.booted) return;
-    if (id !== state.feedUser || opts.genresChanged) resetFeed().catch(showError);
+    if ((user()?.id || null) !== state.feedUser || opts.genresChanged) resetFeed().catch(showError);
     else showReadyStories();
   },
 };
 
-// ---------- Start ----------
+// ---------- Start: play immediately ----------
 window.accountReady = new Promise(r => { window.resolveAccount = r; });
 async function init() {
   applySettings();
   showInstall();
   const wait = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
-  // Give the 3D games (and the saved login) a few seconds to load; the feed works without them.
   await Promise.all([loadVideos(), wait(window.gamesReady, 4000), wait(window.accountReady, 3000)]);
   try {
     await resetFeed();
     state.booted = true;
     splash.classList.add("gone");
+    startReading();                       // autoplay (muted if the browser requires a tap first)
   } catch (err) {
     showError(err);
   }

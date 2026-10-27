@@ -39,6 +39,13 @@ Requirements that every phase must follow. The full original phase plan lives in
 - **Generator adapts:** `run_batch.py` reads `tag_popularity` and picks about 70% of regular stories from readers' favorite genre/tone combos, with 30% random.
 - **Known limit:** Supabase's built-in email sender is very rate-limited on the free plan (a few emails per hour). Fine for testing. For a real launch, connect a free SMTP service in Supabase > Authentication > SMTP.
 
+## TikTok-style update (2026-10-27)
+- **Kept from TikTok:** full-screen autoplay, a right rail (storyteller, like, comments, save, share, ⋯ report), bottom-left info (name, title, hashtags, length), a bottom nav (Home, Discover, +, Inbox, Me), Latest/For You tabs, double-tap to like with a heart burst, and the comment drawer.
+- **Fixed vs TikTok:** captions stay clear of every button. The progress bar can be dragged and shows the time. Story length is always shown. Tap-to-pause stops the voice AND the background. A "take a break?" card appears after 15 stories or 25 minutes. Comments are moderated: a blocked-word list (editable in `blocked_words`), no links, 20 an hour max, and one report hides a comment.
+- **Autoplay:** stories start the moment the app opens. Browsers block sound until the first tap, so it plays muted with captions and shows a "Tap for sound" pill. The first tap turns sound on (it doesn't pause).
+- **Usernames:** any letters, numbers and symbols, no spaces, 3-20 characters, unique ignoring capitals (`supabase/004_comments.sql`).
+- **Story writer:** if no draft clears the full engagement bar, the best safe, logical draft scoring at least 6/10 overall is published, so the feed doesn't starve.
+
 ## Phase 2 decisions
 - Only an "is 13+" flag is stored on profiles, never a birthdate. Sign-up is rejected by the database if the flag is missing.
 - Quiz answers are kept in a hidden table (`story_answers`) so the app can't leak them. Answers will be scored by a database function (Phase 5).

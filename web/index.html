@@ -37,14 +37,52 @@
 
   <div id="app">
     <header id="topbar">
-      <span class="logo"><svg class="logo-mark"><use href="#fb-mark"/></svg><span>Flyp<b>Book</b></span></span>
+      <span class="logo" aria-label="FlypBook"><svg class="logo-mark"><use href="#fb-mark"/></svg></span>
+      <nav class="feed-tabs" aria-label="Feeds">
+        <button data-feed="latest">Latest</button>
+        <button data-feed="foryou" aria-current="true">For You</button>
+      </nav>
       <button id="settings-btn" class="icon-btn" aria-label="Settings">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"
              stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.2" fill="#15101f"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.2" fill="#15101f"/></svg>
       </button>
+      <button id="filter-chip" class="filter-chip" hidden></button>
     </header>
 
+    <button id="unmute" class="unmute" hidden>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m23 9-6 6M17 9l6 6"/></svg>
+      Tap for sound
+    </button>
+
     <main id="feed" aria-label="Stories"></main>
+
+    <!-- Bottom navigation (thumb reach) -->
+    <nav id="bottomnav" aria-label="Main">
+      <button data-nav="home" aria-current="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Home</span></button>
+      <button data-nav="discover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>Discover</span></button>
+      <button data-nav="create" class="create" aria-label="Request a story"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></i></button>
+      <button data-nav="inbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Inbox</span><b class="badge" hidden></b></button>
+      <button data-nav="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>Me</span></button>
+    </nav>
+
+    <section id="comments" class="sheet drawer" hidden aria-label="Comments">
+      <div class="grabber"></div>
+      <div class="sheet-head"><h2 id="comments-title">Comments</h2><button class="icon-btn" data-close aria-label="Close comments">&times;</button></div>
+      <div id="comments-list" class="comments-list"></div>
+      <form id="comment-form" class="comment-form">
+        <input id="comment-input" maxlength="300" placeholder="Add a comment..." autocomplete="off" enterkeyhint="send">
+        <button class="btn-send" aria-label="Post comment"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5 21 12 3 3.5 5 12z"/></svg></button>
+      </form>
+    </section>
+
+    <section id="discover" class="sheet drawer" hidden aria-label="Discover">
+      <div class="grabber"></div>
+      <div class="sheet-head"><h2>Discover</h2><button class="icon-btn" data-close aria-label="Close">&times;</button></div>
+      <div class="label">Browse by kind</div>
+      <div class="chips" id="discover-genres"></div>
+      <div class="label">Most liked</div>
+      <div class="list" id="discover-top"><p class="fine">Loading...</p></div>
+    </section>
 
     <section id="settings" class="sheet" hidden aria-label="Settings">
       <div class="grabber"></div>

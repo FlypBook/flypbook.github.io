@@ -217,6 +217,7 @@ MIN_HOOK_SCORE = 8
 MIN_PACING_SCORE = 7
 MIN_OVERALL_SCORE = 7
 MAX_CLICHES = 2
+FALLBACK_MIN_OVERALL = 6   # if no draft clears the bar, publish the best safe one scoring at least this
 
 # Quick local check on requests so obvious junk never reaches the AI at all.
 REQUEST_BLOCKLIST = re.compile(
@@ -458,6 +459,7 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
                         f"{random.choice(WORLDS)}; {random.choice(SPARKS)}.\n")
 
     last_problem = "unknown"
+    best = None   # the most engaging draft that was safe and made sense, in case none hits the full bar
     for attempt in range(1, MAX_ATTEMPTS + 1):
         # 2. Plan and write a first draft.
         print(f"Writing draft (attempt {attempt}/{MAX_ATTEMPTS})...")
@@ -548,6 +550,8 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
             print(f"APPROVED: \"{record['title']}\" ({words} words; {score_text})\nSaved to {path}")
             return {"status": "approved", "record": record}
 
+        if safety["safe"] and logic["ok"] and (best is None or scores["overall"] > best["engagement"]["scores"]["overall"]):
+            best = record
         path = save(record, REJECTED_DIR)
         if not safety["safe"]:
             last_problem = f"failed safety check: {safety['reason']}"
@@ -567,6 +571,11 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
             user_prompt += f"\nA previous draft was rejected for {feedback}. Avoid that.\n"
         print(f"  Story {last_problem}\n  (saved to {path}). Trying again...")
 
+    # Nothing cleared the full bar, but a safe, logical draft that's decent still beats publishing nothing.
+    if best and best["engagement"]["scores"]["overall"] >= FALLBACK_MIN_OVERALL:
+        path = save(best, APPROVED_DIR)
+        print(f"APPROVED (best of {MAX_ATTEMPTS}): \"{best['title']}\" (overall {best['engagement']['scores']['overall']})\nSaved to {path}")
+        return {"status": "approved", "record": best}
     print(f"FAILED after {MAX_ATTEMPTS} attempts. Last problem: {last_problem}")
     return {"status": "failed", "reason": last_problem}
 

@@ -62,24 +62,12 @@ sb.auth.onAuthStateChange((event, session) => {
   if (changed || event === "USER_UPDATED") refresh();
 });
 
-// ---------- top bar buttons: requests (+), notifications (bell), profile ----------
-const bar = document.getElementById("topbar");
-const actions = $(`<div class="top-actions">
-  <button class="icon-btn" id="req-btn" aria-label="Request a story"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-  <button class="icon-btn" id="bell-btn" aria-label="Notifications"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="badge" hidden></span></button>
-  <button class="icon-btn" id="me-btn" aria-label="Profile"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></button>
-</div>`);
-const settingsBtn = document.getElementById("settings-btn");
-bar.insertBefore(actions, settingsBtn);
-actions.append(settingsBtn);
-actions.querySelector("#req-btn").addEventListener("click", () => openSheet(acct.user ? "request" : "signup", { reason: "Create an account to request your own stories." }));
-actions.querySelector("#bell-btn").addEventListener("click", () => openSheet(acct.user ? "notifications" : "signup", { reason: "Create an account to get notified when your stories are ready." }));
-actions.querySelector("#me-btn").addEventListener("click", () => openSheet(acct.user ? "profile" : "signup"));
+// ---------- bottom nav: unread badge on Inbox ----------
 function updateTopbar() {
-  const badge = actions.querySelector(".badge");
+  const badge = document.querySelector('#bottomnav [data-nav="inbox"] .badge');
+  if (!badge) return;
   badge.hidden = !acct.unread.length;
   badge.textContent = acct.unread.length > 9 ? "9+" : acct.unread.length;
-  actions.querySelector("#me-btn").classList.toggle("signed-in", !!acct.user);
 }
 
 // ---------- views ----------
@@ -129,7 +117,7 @@ function sorryHtml() {
 function viewSignupDetails() {
   const chosen = new Set();
   body.innerHTML = `<form class="form" id="su-form">
-      <label>Username<input id="su-user" required minlength="3" maxlength="20" pattern="[a-z0-9_]{3,20}" autocomplete="username" placeholder="lowercase, numbers, _"></label>
+      <label>Username<input id="su-user" required minlength="3" maxlength="20" autocomplete="username" autocapitalize="off" placeholder="3-20 characters, no spaces"></label>
       <label>Email<input id="su-email" type="email" required autocomplete="email"></label>
       <label>Password<input id="su-pass" type="password" required minlength="8" autocomplete="new-password" placeholder="at least 8 characters"></label>
       <div class="label">Pick your favorite kinds of stories</div>
@@ -144,11 +132,13 @@ function viewSignupDetails() {
   }));
   body.querySelector("#su-form").addEventListener("submit", async e => {
     e.preventDefault();
-    const username = body.querySelector("#su-user").value.trim().toLowerCase();
-    if (!/^[a-z0-9_]{3,20}$/.test(username)) return msg("Usernames are 3-20 lowercase letters, numbers, or _.", "error");
+    // Any letters (any case), numbers, and symbols are fine; just no spaces, 3-20 characters.
+    const username = body.querySelector("#su-user").value.trim();
+    if (!/^\S{3,20}$/u.test(username)) return msg("Usernames are 3-20 characters with no spaces.", "error");
     msg("Creating your account...");
-    const { data: taken } = await sb.from("public_usernames").select("id").eq("username", username).maybeSingle();
-    if (taken) return msg("That username is taken. Try another.", "error");
+    // Unique ignoring capitals ("Sam" and "sam" count as the same name).
+    const { data: taken } = await sb.from("public_usernames").select("id").ilike("username", username.replace(/[\\%_]/g, "\\$&")).limit(1);
+    if (taken?.length) return msg("That username is taken. Try another.", "error");
     const { error } = await sb.auth.signUp({
       email: body.querySelector("#su-email").value.trim(),
       password: body.querySelector("#su-pass").value,
@@ -214,6 +204,8 @@ async function viewProfile() {
     </div>
     <div class="label">Favorite kinds of stories</div>
     <div class="chips" id="pf-genres">${GENRES.map(g => `<button type="button" class="chip-btn" data-g="${g}" aria-pressed="${genres.has(g)}">${g}</button>`).join("")}</div>
+    <div class="label">Saved stories</div>
+    <div id="pf-saved" class="list"><p class="fine">Loading...</p></div>
     <div class="label">Your story requests</div>
     <div id="pf-requests" class="list"><p class="fine">Loading...</p></div>
     <div class="row-btns">
@@ -229,6 +221,16 @@ async function viewProfile() {
   }));
   body.querySelector("#pf-out").addEventListener("click", async () => { await sb.auth.signOut(); closeSheet(); window.App?.toast("Logged out"); });
   body.querySelector("#pf-delete").addEventListener("click", viewDelete);
+  const { data: saved } = await sb.from("saves").select("story_id, stories(title, genre)").order("created_at", { ascending: false }).limit(20);
+  const savedList = body.querySelector("#pf-saved");
+  if (savedList) {
+    savedList.innerHTML = saved?.length ? "" : `<p class="fine">Tap the bookmark on any story to save it here.</p>`;
+    for (const s of saved || []) {
+      const b = $(`<button class="list-item"><span>${esc(s.stories?.title || "Story")}</span><em>${esc(s.stories?.genre || "")}</em></button>`);
+      b.addEventListener("click", () => { closeSheet(); window.App?.openStory(s.story_id); });
+      savedList.append(b);
+    }
+  }
   const { data: reqs } = await sb.from("story_requests").select("prompt,status,created_at,story_id").order("created_at", { ascending: false }).limit(10);
   const list = body.querySelector("#pf-requests");
   if (list) list.innerHTML = reqs?.length ? reqs.map(r => `<div class="list-item"><span>${esc(r.prompt)}</span><em data-s="${r.status}">${r.status}</em></div>`).join("")
