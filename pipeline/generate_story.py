@@ -30,6 +30,9 @@ from pathlib import Path
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 WRITER_MODEL = "openai/gpt-oss-120b"  # writes the stories
 REVIEW_MODEL = "openai/gpt-oss-120b"  # safety + logic checks
+# Free models to fall back on, in order. Each one has its own free daily limit, so when one is
+# used up the batch switches to the next instead of stopping for the day (see next_model()).
+MODEL_CHAIN = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
 
 GENRES = [
     "aita",                 # "Am I the jerk?" style dilemmas
@@ -61,6 +64,17 @@ WORLDS = [
     "a summer job at a pet shelter", "a holiday dinner", "a shared streaming account", "a school election",
     "a grandparent's house for the summer", "a moving day", "a garage band", "a bake sale fundraiser",
     "a first apartment", "a science fair", "a lost-and-found mix-up", "a community pool",
+    "a family reunion cookout", "a school field trip", "a new stepsibling moving in", "a group chat for a class",
+    "a summer camp job", "a dog-walking business", "a homecoming committee", "a ride-share to a concert",
+    "a part-time job at a movie theater", "a sleepover", "a fantasy football league with family",
+    "a shared locker", "a tutoring job", "a cousin's quinceanera", "a coffee shop job", "a debate tournament",
+    "a neighbor's pool party", "a car wash fundraiser", "a family vacation rental", "a group costume",
+    "a lemonade stand turned business", "a robotics team", "a babysitting co-op between neighbors",
+    "a school play", "a gaming tournament", "a theme park trip", "a wedding where the narrator is a bridesmaid",
+    "a library volunteer job", "a family board game night", "a secret santa exchange", "a yearbook committee",
+    "a mall kiosk job", "a lake house weekend", "a student council budget", "a cooking class",
+    "a little league team the narrator coaches", "a dorm move-in day", "an apartment with thin walls",
+    "a grocery store job", "a hiking club", "a tiny-town parade", "a buffet restaurant job",
 ]
 SPARKS = [
     "someone takes credit for the narrator's work", "a rule gets enforced on only one person",
@@ -69,6 +83,37 @@ SPARKS = [
     "the narrator follows instructions exactly, and it backfires on the person who gave them",
     "a misunderstanding snowballs", "someone keeps showing up uninvited",
     "a family tradition gets 'updated' without asking", "a stranger's demand gets more and more absurd",
+    "someone 'reserves' something that isn't theirs", "a parent plays favorites in a way everyone notices",
+    "someone fakes an emergency to get out of a commitment", "a manager makes a rule that destroys their own plan",
+    "someone keeps 'borrowing' food with their name on it", "a surprise party is planned for the wrong person",
+    "an online review starts a feud", "someone insists they're always right, and is spectacularly wrong",
+    "a sibling copies everything the narrator does", "someone demands a refund for something absurd",
+    "a lie told to impress someone keeps growing", "a group project member disappears until grading day",
+    "a guest refuses to leave", "a 'free' favor comes with a surprise bill",
+    "someone reads the narrator's private messages", "an inheritance of something weird",
+    "a customer insists the narrator is someone else", "a neighbor's 'harmless' habit escalates",
+    "a bet that goes way too far", "someone tries to rename something that isn't theirs",
+    "a quiet coworker turns out to be secretly in charge", "the narrator finds out why the old tenant left",
+    "a recipe gets stolen and entered in a contest", "a pet causes a chain reaction of disasters",
+    "a wrong-number text starts something unexpected", "a strict rule-follower meets an even stricter rule",
+    "the narrator gets blamed for a prank they warned everyone about", "a 'lost' item keeps coming back",
+]
+
+# Classic Reddit-style post shapes. These are formats, not anyone's posts: the writer invents
+# everything else. One is picked at random so the feed doesn't feel samey.
+FORMATS = [
+    "an 'AITA for...?' post: the narrator explains a conflict fairly from both sides and ends asking if they were wrong",
+    "a 'TIFU by...' post: a small mistake today snowballs into chaos",
+    "a story with an 'UPDATE:' section at the end, written days later, with one more twist",
+    "a petty revenge story: the narrator gets even in a clever, harmless, perfectly legal way",
+    "a malicious compliance story: the narrator follows bad instructions to the letter",
+    "an 'entitled person' story: someone's demands get more outrageous until it backfires on them",
+    "a 'my family thinks I'm overreacting' post that builds to a reveal",
+    "a 'something weird happened and I still can't explain it' post (eerie, never gory)",
+    "a 'the quiet one finally snapped' story told by a witness",
+    "a 'I found out the truth about...' story that drip-feeds clues",
+    "a wholesome story that starts like drama and ends with a twist of kindness",
+    "a workplace story that starts 'I work at...' and has a boss or customer from another planet",
 ]
 READING_LEVELS = ["easy", "medium", "challenging"]
 
@@ -254,6 +299,18 @@ MAX_RATE_WAIT = 120  # seconds; anything longer means the free daily limit is us
 
 class DailyLimitReached(RuntimeError):
     """Groq's free daily limit is used up; try again on a later run."""
+
+
+def next_model():
+    """Switch writing and reviewing to the next free model in MODEL_CHAIN.
+    Returns False when every model has used up its free daily limit."""
+    global WRITER_MODEL, REVIEW_MODEL
+    i = MODEL_CHAIN.index(WRITER_MODEL) + 1 if WRITER_MODEL in MODEL_CHAIN else len(MODEL_CHAIN)
+    if i >= len(MODEL_CHAIN):
+        return False
+    WRITER_MODEL = REVIEW_MODEL = MODEL_CHAIN[i]
+    print(f"Switching to the next free model: {WRITER_MODEL}")
+    return True
 
 
 def call_llm(api_key, system, user, temperature, reasoning_effort="medium", model=None):

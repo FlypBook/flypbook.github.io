@@ -2,7 +2,7 @@
 // The deploy replaces BUILD with the commit id, so every release refreshes the cache.
 const CACHE = "flypbook-BUILD";
 const SHELL = [
-  "./", "index.html", "styles.css", "config.js", "app.js", "narrator.js", "account.js",
+  "./", "index.html", "styles.css", "config.js", "app.js", "narrator.js", "account.js", "taste.js", "social.js",
   "backgrounds.js", "gameplay.js", "game3d.js", "game3d_more.js", "games_kit.js",
   "games_ride.js", "games_fp.js", "games_satisfy.js", "games_arcade.js",
   "manifest.json", "videos.json", "privacy.html", "icons/icon-192.png", "icons/icon-512.png",

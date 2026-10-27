@@ -4,7 +4,7 @@ name: Generate stories
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # every 6 hours (times are UTC)
+    - cron: "0 */4 * * *"  # every 4 hours (times are UTC); each run stops at the free daily limit
   workflow_dispatch:         # adds a "Run workflow" button on the Actions tab
 
 # Never run two batches at once (keeps the request queue simple).
@@ -18,7 +18,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 

@@ -94,8 +94,13 @@ function updateTopbar() {
 }
 
 // ---------- views ----------
+// Views shown in the account sheet. social.js adds more (profiles, friends, posting).
+const VIEWS = { signup: viewSignup, login: viewLogin, profile: viewProfile, request: viewRequest,
+  notifications: viewNotifications, forgot: viewForgot, delete: viewDelete };
 function render(view, opts = {}) {
-  ({ signup: viewSignup, login: viewLogin, profile: viewProfile, request: viewRequest, notifications: viewNotifications, forgot: viewForgot })[view](opts);
+  sheet.scrollTop = 0;
+  sheet.dataset.view = view;
+  (VIEWS[view] || VIEWS.profile)(opts);
 }
 function tabs(active) {
   return `<div class="seg auth-tabs"><button data-tab="signup" aria-pressed="${active === "signup"}">Sign up</button><button data-tab="login" aria-pressed="${active === "login"}">Log in</button></div>`;
@@ -328,6 +333,10 @@ function friendly(error) {
   if (/Database error saving new user/i.test(m)) return "That username is taken or not allowed (3-20 characters, no spaces). Try another.";
   return m;
 }
+
+// Shared with social.js.
+acct.views = VIEWS;
+acct.ui = { sb, body, title, $, esc, msg, render, friendly, loadProfile, refresh, updateTopbar, GENRES, TONES, LEVEL: l => LEVEL(l) };
 
 acct.markRead = async ids => {
   if (!ids.length) return;

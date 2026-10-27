@@ -6,9 +6,14 @@
 
 const CONFIG = window.FLYPBOOK_CONFIG;
 const PAGE_SIZE = 10;
-const VIDEO_SHARE = 0.3;     // share of stories that get a real video clip (the rest get a gameplay scene)
-const EXPLORE_EVERY = 5;     // For You: every 5th story is a "something different" pick (about 20%)
-const BREAK_AFTER = { stories: 15, minutes: 25 };
+// Share of stories that get a real video clip (the rest get a code-drawn scene), per background setting.
+const VIDEO_SHARE = { mix: 0.3, games: 0, real: 1, calm: 0.5 };
+// Calm / satisfying scenes (Settings > Background > Calm). Everything else counts as gameplay.
+const CALM_SCENES = new Set(["OrbsScene", "WavesScene", "PendulumScene", "MarbleRun", "HydraulicPress", "SoapCut",
+  "BallPour", "PotteryWheel", "LaserEngrave", "Stack3D", "Domino3D", "JellyHop", "SandSliceScene"]);
+// For You: every Nth story is a "something different" pick, per Settings > Feed > Discovery.
+const EXPLORE_EVERY = { less: 8, normal: 5, more: 3 };
+const SHORT_SECONDS = 180;   // "quick reads" are under 3 minutes
 const LEVEL_LABEL = { easy: "Easy read", medium: "Medium read", challenging: "Challenging" };
 const LEVEL_NUM = { easy: 1, medium: 2, challenging: 3 };
 const GENRES = ["aita", "tifu", "entitled people", "malicious compliance", "petty revenge", "family drama",
@@ -24,6 +29,15 @@ const ICON = {
   more: '<svg viewBox="0 0 24 24" class="ln"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01"/></svg>',
 };
 
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const SETTING_DEFAULTS = {
+  narration: "on", rate: "1", voice: "any",
+  capsize: "m", capstyle: "varied", hlcolor: "varied", contrast: "normal",
+  bg: reduceMotion ? "dim" : "on", bgtype: "mix", motion: reduceMotion ? "reduce" : "auto",
+  autoplay: "on", length: "any", readers: "on", explore: "normal", hide: [],
+  breaks: "25",
+  notify_follows: true, notify_sends: true, notify_posts: true,
+};
 const app = document.getElementById("app");
 const feed = document.getElementById("feed");
 const splash = document.getElementById("splash");
@@ -64,28 +78,127 @@ const narrator = new Narrator({
 const acct = () => window.Account || {};
 const user = () => acct().user || null;
 
-// ---------- Settings (saved on this device only) ----------
+// ---------- Settings (saved on this device, and synced to the account when signed in) ----------
+// Each setting: [key, label, [[value, button text], ...]]. Rendered into the Settings sheet.
+const SETTINGS_UI = [
+  ["Listening", [
+    ["narration", "Narration", [["on", "Voice on"], ["off", "Read silently"]]],
+    ["rate", "Speed", [["0.8", "0.8×"], ["1", "1×"], ["1.2", "1.2×"], ["1.5", "1.5×"]]],
+    ["voice", "Favorite narrator", [["any", "Any"], ["af_heart", "Heart"], ["af_heart,af_sky", "Sky"], ["am_liam", "Liam"], ["phone", "Phone"]],
+      "Stories read by your favorite show up more. Phone uses your phone's own voice for every story."],
+  ]],
+  ["Captions", [
+    ["capsize", "Text size", [["s", "S"], ["m", "M"], ["l", "L"], ["xl", "XL"]]],
+    ["capstyle", "Look", [["varied", "New look each story"], ["classic", "Always classic"]]],
+    ["hlcolor", "Highlight color", [["varied", "Mix"], ["#ffd43b", "Gold"], ["#7af7ff", "Ice"], ["#ff8fab", "Pink"], ["#b9fbc0", "Mint"]]],
+    ["contrast", "Contrast", [["normal", "Normal"], ["high", "High"]]],
+  ]],
+  ["Background", [
+    ["bg", "Background", [["on", "On"], ["dim", "Dim"], ["off", "Off"]]],
+    ["bgtype", "What plays", [["mix", "Mix"], ["games", "Gameplay"], ["real", "Real clips"], ["calm", "Calm"]]],
+    ["motion", "Motion", [["auto", "Full"], ["reduce", "Reduced"]]],
+  ]],
+  ["Feed", [
+    ["autoplay", "Next story", [["on", "Plays by itself"], ["off", "Waits for a tap"]]],
+    ["length", "Story length", [["any", "Any"], ["short", "Quick"], ["long", "Longer"]]],
+    ["readers", "Stories by readers", [["on", "Show"], ["off", "Hide"]]],
+    ["explore", "Discovery", [["less", "Less"], ["normal", "Normal"], ["more", "More"]],
+      "How often For You mixes in something different from your usual."],
+    ["hide", "Hide these kinds", "genres"],
+  ]],
+  ["Wellbeing", [
+    ["breaks", "Break reminder", [["off", "Off"], ["15", "15 min"], ["25", "25 min"], ["45", "45 min"]]],
+  ]],
+  ["Notifications", [
+    ["notify_follows", "New followers", [[true, "On"], [false, "Off"]]],
+    ["notify_sends", "Stories friends send", [[true, "On"], [false, "Off"]]],
+    ["notify_posts", "New posts from people I follow", [[true, "On"], [false, "Off"]]],
+  ], "account"],
+];
+const FEED_SETTINGS = new Set(["length", "readers", "hide", "voice", "explore"]);
+
 function loadSettings() {
-  const defaults = { narration: "on", rate: "1", bg: matchMedia("(prefers-reduced-motion: reduce)").matches ? "dim" : "on" };
-  try { return { ...defaults, ...JSON.parse(localStorage.getItem("flypbook-settings") || "{}") }; }
-  catch { return defaults; }
+  try { return { ...SETTING_DEFAULTS, ...JSON.parse(localStorage.getItem("flypbook-settings") || "{}") }; }
+  catch { return { ...SETTING_DEFAULTS }; }
 }
-function saveSettings() { try { localStorage.setItem("flypbook-settings", JSON.stringify(state.settings)); } catch {} }
+let settingsSyncTimer;
+function saveSettings() {
+  try { localStorage.setItem("flypbook-settings", JSON.stringify(state.settings)); } catch {}
+  // Signed in: keep the same settings on every device (and tell the server which notifications to send).
+  clearTimeout(settingsSyncTimer);
+  if (user()) settingsSyncTimer = setTimeout(() => window.sb.from("profiles").update({ settings: state.settings }).eq("id", user().id).then(() => {}), 1500);
+}
 function applySettings() {
-  app.dataset.bg = state.settings.bg;
-  for (const seg of document.querySelectorAll("#settings .seg")) {
-    for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.value === state.settings[seg.dataset.setting]));
-  }
+  const s = state.settings;
+  Object.assign(app.dataset, { bg: s.bg, capsize: s.capsize, contrast: s.contrast, motion: s.motion });
+  window.FlypScenes = {
+    allow: name => s.bgtype === "calm" ? CALM_SCENES.has(name) : s.bgtype === "games" ? !CALM_SCENES.has(name) : true,
+    weight: name => window.taste.sceneWeight(name),
+  };
+  state.stories.forEach(applyCaptionLook);
+  renderSettings();
   updateMedia();
 }
-document.querySelectorAll("#settings .seg").forEach(seg => seg.addEventListener("click", e => {
-  const b = e.target.closest("button");
-  if (!b) return;
-  state.settings[seg.dataset.setting] = b.dataset.value;
-  saveSettings(); applySettings();
-  if (seg.dataset.setting !== "bg" && state.playing) startReading();
-}));
-document.getElementById("settings-btn").addEventListener("click", () => { closeSheets(); settingsSheet.hidden = false; });
+
+function renderSettings() {
+  const box = document.getElementById("settings-body");
+  if (!box) return;
+  box.replaceChildren();
+  for (const [section, items, only] of SETTINGS_UI) {
+    if (only === "account" && !user()) continue;
+    box.append(el("div", "settings-section", section));
+    for (const [key, label, options, hint] of items) {
+      const row = el("div", "setting");
+      row.append(el("span", null, label));
+      if (options === "genres") {
+        const chips = el("div", "chips");
+        for (const g of GENRES) {
+          const b = el("button", "chip-btn", g);
+          b.setAttribute("aria-pressed", String(state.settings.hide.includes(g)));
+          b.addEventListener("click", () => {
+            const hide = new Set(state.settings.hide);
+            hide.has(g) ? hide.delete(g) : hide.add(g);
+            changeSetting("hide", [...hide]);
+          });
+          chips.append(b);
+        }
+        row.append(chips);
+      } else {
+        const seg = el("div", "seg");
+        for (const [value, text] of options) {
+          const b = el("button", null, text);
+          b.setAttribute("aria-pressed", String(state.settings[key] === value));
+          b.addEventListener("click", () => changeSetting(key, value));
+          seg.append(b);
+        }
+        row.append(seg);
+      }
+      if (hint) row.append(el("p", "fine", hint));
+      box.append(row);
+    }
+  }
+  if (user()) {
+    const edit = el("button", "btn-secondary", "Edit profile and privacy");
+    edit.addEventListener("click", () => acct().open?.("editProfile"));
+    box.append(edit);
+  }
+  const reset = el("button", "btn-link", "Reset my For You recommendations");
+  reset.addEventListener("click", () => resetTaste());
+  box.append(reset);
+}
+function changeSetting(key, value) {
+  const old = state.settings[key];
+  state.settings[key] = value;
+  saveSettings();
+  if (key === "bgtype") state.stories.forEach(releaseMedia);
+  applySettings();
+  if ((key === "narration" || key === "rate" || key === "voice") && state.playing) startReading();
+  if (FEED_SETTINGS.has(key) && JSON.stringify(old) !== JSON.stringify(value)) {
+    clearTimeout(state.feedTimer);
+    state.feedTimer = setTimeout(() => resetFeed().catch(showError), 900);   // wait for more taps, then rebuild once
+  }
+}
+document.getElementById("settings-btn").addEventListener("click", () => { closeSheets(); renderSettings(); settingsSheet.hidden = false; });
 document.getElementById("settings-close").addEventListener("click", () => { settingsSheet.hidden = true; });
 for (const s of [commentsSheet, discoverSheet]) s.querySelector("[data-close]").addEventListener("click", () => { s.hidden = true; });
 
@@ -146,12 +259,33 @@ async function api(path, init) {
 }
 
 const BASE_FIELDS = "id,title,body,genre,tone,reading_level,est_read_seconds,requested_by,created_at,like_count,question_prompt,question_choices";
-let optional = ["comment_count", "audio_url", "word_times"];   // newer columns; dropped if the database doesn't have them yet
+// Newer columns, newest first; each is dropped if the database doesn't have it yet.
+let optional = ["author_id", "source", "comment_count", "audio_url", "word_times"];
 async function fetchStories(query) {
   for (;;) {
     try { return await api(`stories?select=${[BASE_FIELDS, ...optional].join(",")}&${query}`); }
     catch (err) { if (err.status !== 400 || !optional.length) throw err; optional = optional.slice(1); }
   }
+}
+
+/** Server-side filters from Settings > Feed (kinds to hide, story length) plus a Discover pick. */
+function filterQuery() {
+  const s = state.settings, q = [];
+  if (state.filter) q.push(`genre=eq.${encodeURIComponent(state.filter)}`);
+  else if (s.hide.length) q.push(`genre=not.in.(${s.hide.map(g => encodeURIComponent(`"${g}"`)).join(",")})`);
+  if (s.length === "short") q.push(`est_read_seconds=lt.${SHORT_SECONDS}`);
+  if (s.length === "long") q.push(`est_read_seconds=gte.${SHORT_SECONDS}`);
+  return q.length ? "&" + q.join("&") : "";
+}
+/** Client-side filters (Settings > Feed > Stories by readers). */
+const allowed = r => state.settings.readers !== "off" || r.source !== "user";
+
+/** Load stories by id, keeping the given order. */
+async function fetchByIds(ids) {
+  if (!ids.length) return [];
+  const rows = await fetchStories(`id=in.(${ids.join(",")})`);
+  const byId = new Map(rows.map(r => [r.id, r]));
+  return ids.map(id => byId.get(id)).filter(Boolean);
 }
 
 async function loadMore() {
@@ -162,23 +296,37 @@ async function loadMore() {
     if (state.mode === "ranked") {
       rows = state.queue.splice(0, PAGE_SIZE);
       if (!state.queue.length) state.done = true;
+    } else if (state.mode === "friends") {
+      const page = state.queue.splice(0, PAGE_SIZE);
+      rows = (await fetchByIds(page.map(p => p.story_id))).map(r => {
+        const via = page.find(p => p.story_id === r.id);
+        return { ...r, via: via.reason === "liked" ? `liked by @${via.username}` : null };
+      });
+      if (!state.queue.length) state.done = true;
     } else {
-      const offset = state.stories.filter(s => !s.pinned).length;
-      const genre = state.filter ? `&genre=eq.${encodeURIComponent(state.filter)}` : "";
-      rows = await fetchStories(`order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}${genre}`);
+      const offset = state.offset || 0;
+      rows = await fetchStories(`order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}${filterQuery()}`);
+      state.offset = offset + rows.length;
       if (rows.length < PAGE_SIZE) state.done = true;
+      rows = rows.filter(allowed);
     }
     await addStories(rows.filter(r => !state.stories.some(s => s.data.id === r.id)));
-    if (state.done) addMessageCard("You're all caught up", "New stories drop every few hours. Come back soon.");
+    if (state.done) {
+      if (state.mode === "friends" && !state.stories.length) addMessageCard("Your Friends feed is empty", "Follow people from Inbox > Friends. Stories they post and like show up here.");
+      else addMessageCard("You're all caught up", "New stories drop every few hours. Come back soon.");
+    }
   } finally {
     state.loading = false;
   }
 }
 
+/** Public names and pictures for requesters and writers. */
 async function namesFor(rows) {
-  const ids = [...new Set(rows.map(r => r.requested_by).filter(Boolean))];
+  const ids = [...new Set(rows.flatMap(r => [r.requested_by, r.author_id]).filter(Boolean))];
   const names = {};
-  if (ids.length) for (const u of await api(`public_usernames?select=id,username&id=in.(${ids.join(",")})`)) names[u.id] = u.username;
+  if (!ids.length) return names;
+  try { for (const u of await api(`public_profiles?select=*&id=in.(${ids.join(",")})`)) names[u.id] = u; }
+  catch { for (const u of await api(`public_usernames?select=id,username&id=in.(${ids.join(",")})`)) names[u.id] = u; }
   return names;
 }
 
@@ -186,7 +334,8 @@ function makeStory(row, names, pinned = false) {
   const prepared = prepareStory(row.body);
   prepared.audioUrl = row.audio_url || null;
   prepared.times = row.word_times || null;
-  const story = { data: { ...row, username: names[row.requested_by] }, prepared, word: -1, ended: false, pinned };
+  const data = { ...row, username: names[row.requested_by]?.username, author: names[row.author_id]?.username, authorProfile: names[row.author_id] };
+  const story = { data, prepared, word: -1, ended: false, pinned };
   story.seed = hash(row.id);
   buildCard(story);
   return story;
@@ -230,52 +379,99 @@ function hash(text) {
   return h >>> 0;
 }
 
-// ---------- For You ranking (runs on the phone, no AI) ----------
+// ---------- For You ranking: the taste model (taste.js) learns each reader's patterns on the phone ----------
+const finishedLocal = new Set(JSON.parse((() => { try { return localStorage.getItem("flypbook-finished") || "[]"; } catch { return "[]"; } })()));
+function rememberFinished(id) {
+  finishedLocal.add(id);
+  try { localStorage.setItem("flypbook-finished", JSON.stringify([...finishedLocal].slice(-1500))); } catch {}
+}
+
 async function buildForYou() {
-  const genre = state.filter ? `&genre=eq.${encodeURIComponent(state.filter)}` : "";
-  const cands = await fetchStories(`order=created_at.desc&limit=200${genre}`);
-  const aff = {}, finished = new Set(), now = Date.now();
-  const byId = new Map(cands.map(s => [s.id, s]));
-  const bump = (s, g, t) => { if (!s) return; aff["g:" + s.genre] = (aff["g:" + s.genre] || 0) + g; aff["t:" + s.tone] = (aff["t:" + s.tone] || 0) + t; };
+  const cands = (await fetchStories(`order=created_at.desc&limit=300${filterQuery()}`)).filter(allowed);
+  const names = await namesFor(cands);
+  for (const c of cands) c.author = names[c.author_id]?.username;
+  const finished = new Set(finishedLocal), now = Date.now(), model = window.taste;
   let level = 1.6;
   if (user()) {
     const sb = window.sb;
     const [likes, events, answers] = await Promise.all([
-      sb.from("likes").select("story_id"), sb.from("story_events").select("story_id,event").limit(2000), sb.from("answers").select("story_id,correct"),
+      sb.from("likes").select("story_id"), sb.from("story_events").select("story_id,event").limit(2000), sb.from("answers").select("story_id"),
     ]);
-    for (const g of acct().profile?.favorite_genres || []) aff["g:" + g] = (aff["g:" + g] || 0) + 2;
-    for (const l of likes.data || []) bump(byId.get(l.story_id), 3, 1.5);
-    for (const e of events.data || []) {
-      const s = byId.get(e.story_id);
-      if (e.event === "finish") { finished.add(e.story_id); bump(s, 2, 1); }
-      else if (e.event === "share") bump(s, 3, 1.5);
-      else if (e.event === "skip") bump(s, -1, -0.5);
-    }
-    for (const a of answers.data || []) { if (a.correct) bump(byId.get(a.story_id), 0.5, 0.2); finished.add(a.story_id); }
+    for (const e of events.data || []) if (e.event === "finish") finished.add(e.story_id);
+    for (const a of answers.data || []) finished.add(a.story_id);
     level = acct().profile?.reading_level || level;
+    // A brand-new model on this device learns once from the account's history (likes, finishes, skips).
+    if (!model.seeded) {
+      const byId = new Map(cands.map(s => [s.id, s]));
+      for (const g of acct().profile?.favorite_genres || []) model.learn([`g:${g}`], 1, 0.5);
+      for (const l of likes.data || []) { const s = byId.get(l.story_id); if (s) model.learn(TasteModel.features(s), 1, 1.5); }
+      for (const e of events.data || []) {
+        const s = byId.get(e.story_id);
+        if (s && e.event === "finish") model.learn(TasteModel.features(s), 1);
+        if (s && e.event === "skip") model.learn(TasteModel.features(s), 0);
+      }
+      model.seeded = true; model.save();
+    }
   }
+  const voice = state.settings.voice;
+  // Early on, try more variety; as the model learns, trust it more.
+  const curiosity = 0.35 / Math.sqrt(1 + model.seen / 15);
   const scored = cands.filter(s => !finished.has(s.id)).map(s => {
+    const f = TasteModel.features(s);
     const ageDays = (now - new Date(s.created_at)) / 864e5;
-    const score = (aff["g:" + s.genre] || 0) + 0.5 * (aff["t:" + s.tone] || 0)
-      + Math.max(0, 1 - Math.abs((LEVEL_NUM[s.reading_level] || 2) - level)) * 0.8   // near my reading level
-      + Math.max(0, 1 - ageDays / 7)                                               // fresh
-      + Math.log1p((s.like_count || 0) + (s.comment_count || 0)) * 0.4;             // popular
+    const score = model.predict(f)                                                   // what this reader tends to enjoy
+      + curiosity * model.novelty(f)                                                 // try what it hasn't learned yet
+      + Math.max(0, 1 - Math.abs((LEVEL_NUM[s.reading_level] || 2) - level)) * 0.08 // near my reading level
+      + Math.max(0, 1 - ageDays / 7) * 0.12                                          // fresh
+      + Math.log1p((s.like_count || 0) + (s.comment_count || 0)) * 0.04              // popular with everyone
+      + (voice !== "any" && voice !== "phone" && TasteModel.voiceOf(s) === voice ? 0.15 : 0)
+      + Math.random() * 0.03;                                                        // break ties differently each time
     return { s, score };
   }).sort((a, b) => b.score - a.score);
   const top = scored.map(x => x.s), queue = [];
   const tail = top.splice(Math.ceil(top.length / 2));
+  const every = EXPLORE_EVERY[state.settings.explore] || 5;
   for (let i = 0; top.length || tail.length; i++) {
-    const explore = (i % EXPLORE_EVERY === EXPLORE_EVERY - 1 && tail.length) || !top.length;
+    const explore = (i % every === every - 1 && tail.length) || !top.length;
     queue.push(explore ? tail.splice(Math.floor(Math.random() * tail.length), 1)[0] : top.shift());
   }
   return queue.length ? queue : cands;
 }
 
+/** Turn how a reader reacted to a story into a lesson for the taste model. */
+function learnFrom(story, label, weight = 1) {
+  const bg = story.media?.kind === "video" ? "RealClip" : story.media?.renderer?.scene?.constructor?.name;
+  window.taste.learn(TasteModel.features(story.data, bg), label, weight);
+}
+function learnFromLeaving(story) {
+  if (story.learned || !story.startedAt) return;
+  story.learned = true;
+  const seconds = (Date.now() - story.startedAt) / 1000;
+  const progress = story.ended ? 1 : Math.max(0, story.word) / story.prepared.words.length;
+  if (story.ended) return learnFrom(story, 1);
+  if (seconds < 4 && progress < 0.1) return learnFrom(story, 0, 1.2);      // swiped away almost right away
+  learnFrom(story, Math.min(1, progress * 1.15), 0.8);
+}
+function resetTaste() {
+  window.taste = new TasteModel({ seeded: true });
+  window.taste.onChange = syncTaste;
+  window.taste.save();
+  toast("Your For You recommendations were reset.");
+  if (state.tab === "foryou") resetFeed().catch(showError);
+}
+// Signed-in readers: keep the taste model on the account too, so it follows them to other devices.
+let tasteTimer;
+function syncTaste() {
+  clearTimeout(tasteTimer);
+  if (user()) tasteTimer = setTimeout(() => window.sb.from("profiles").update({ taste: window.taste.toJSON() }).eq("id", user().id).then(() => {}), 15000);
+}
+window.taste.onChange = syncTaste;
+
 /** Rebuild the feed (first load, switching tabs/filters, logging in or out). */
 async function resetFeed() {
   narrator.stop();
   state.stories.forEach(releaseMedia);
-  state.stories = []; state.active = -1; state.done = false; state.queue = [];
+  state.stories = []; state.active = -1; state.done = false; state.queue = []; state.offset = 0;
   feed.replaceChildren(); feed.scrollTop = 0;
   state.feedUser = user()?.id || null;
   document.querySelectorAll(".feed-tabs button").forEach(b => b.setAttribute("aria-current", String(b.dataset.feed === state.tab)));
@@ -294,9 +490,13 @@ async function resetFeed() {
   } else {
     state.liked = new Set(); state.saved = new Set(); state.answered = new Map(); state.reported = new Set();
   }
-  state.mode = state.tab === "foryou" ? "ranked" : "latest";
+  state.mode = state.tab === "foryou" ? "ranked" : state.tab === "friends" && user() ? "friends" : "latest";
   if (state.mode === "ranked") {
     try { state.queue = await buildForYou(); } catch (err) { console.error(err); state.mode = "latest"; }
+  }
+  if (state.mode === "friends") {
+    const { data, error } = await window.sb.rpc("friend_feed", { p_limit: 150 });
+    if (error) { console.error(error); state.mode = "latest"; } else state.queue = data || [];
   }
   const shared = new URLSearchParams(location.search).get("story");  // share links: ?story=<id>
   if (shared && /^[0-9a-f-]{36}$/i.test(shared) && !state.sharedShown) {
@@ -312,6 +512,7 @@ async function resetFeed() {
 
 document.querySelectorAll(".feed-tabs button").forEach(b => b.addEventListener("click", () => {
   if (state.tab === b.dataset.feed) { feed.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  if (b.dataset.feed === "friends" && !user()) return needAccount("Create a free account to follow friends and see what they read.");
   state.tab = b.dataset.feed; resetFeed().catch(showError);
 }));
 filterChip.addEventListener("click", () => { state.filter = null; resetFeed().catch(showError); });
@@ -344,28 +545,65 @@ const CAPTION = {
 };
 function captionStyle(seed) {
   const r = mulberry32(seed ^ 0x9e3779b9), pick = a => a[Math.floor(r() * a.length)];
-  const font = pick(CAPTION.fonts), highlight = pick(CAPTION.highlights);
+  let font = pick(CAPTION.fonts), highlight = pick(CAPTION.highlights);
   // Markers and plates already have a background; keep the outline treatment off them.
   let treatment = pick(CAPTION.treatments);
   if (highlight === "h-marker" && treatment === "t-stroke") treatment = "t-shadow";
-  const [hl, ink] = pick(CAPTION.colors);
+  let [hl, ink] = pick(CAPTION.colors);
+  // Settings > Captions can lock the look and/or the highlight color.
+  if (state.settings.capstyle === "classic") [font, treatment, highlight] = ["f-sans", "t-stroke", "h-ink"];
+  if (state.settings.hlcolor !== "varied") [hl, ink] = CAPTION.colors.find(c => c[0] === state.settings.hlcolor) || [hl, ink];
   return { classes: [font, treatment, highlight], hl, ink };
+}
+const CAPTION_CLASSES = [...CAPTION.fonts, ...CAPTION.treatments, ...CAPTION.highlights];
+function applyCaptionLook(story) {
+  const style = captionStyle(story.seed), card = story.card;
+  card.classList.remove(...CAPTION_CLASSES);
+  card.classList.add(...style.classes);
+  card.style.setProperty("--hl", style.hl);
+  card.style.setProperty("--hl-ink", style.ink);
+}
+
+/** A tappable @name that opens that reader's profile. */
+function personLink(prefix, username) {
+  const b = el("button", "by", `${prefix}@${username}`);
+  b.addEventListener("click", e => { e.stopPropagation(); openUser(username); });
+  return b;
+}
+function openUser(username) {
+  if (!username) return;
+  pauseReading();
+  acct().open?.("user", { username });
+}
+
+/** A round profile picture: the uploaded photo, or the first letter on the reader's color. */
+function avatar(p, cls = "av") {
+  const a = el("span", cls);
+  a.style.setProperty("--pc", p?.profile_color || "#8b5cf6");
+  if (p?.avatar_url) {
+    const img = document.createElement("img");
+    img.src = p.avatar_url; img.alt = ""; img.loading = "lazy";
+    img.addEventListener("error", () => { img.remove(); a.textContent = (p.username || "?")[0].toUpperCase(); }, { once: true });
+    a.append(img);
+  } else a.textContent = (p?.display_name || p?.username || "?")[0].toUpperCase();
+  return a;
 }
 
 function buildCard(story) {
   const d = story.data;
   const card = el("article", "card");
-  const style = captionStyle(story.seed);
-  card.classList.add(...style.classes);
-  card.style.setProperty("--hl", style.hl);
-  card.style.setProperty("--hl-ink", style.ink);
+  story.card = card;
+  applyCaptionLook(story);
   const media = el("div", "media");
   const scrim = el("div", "scrim");
 
-  // Chapter line: what kind of story, how long, who asked for it
+  // Chapter line: what kind of story, how long, who wrote or asked for it
   const chapter = el("div", "chapter");
-  chapter.append(el("span", null, d.genre), el("span", null, minutes(d.est_read_seconds)), el("span", null, "AI story"));
-  if (d.username) chapter.append(el("span", "by", `requested by @${d.username}`));
+  chapter.append(el("span", null, d.genre), el("span", null, minutes(d.est_read_seconds)));
+  if (d.source === "user" && d.author) chapter.append(personLink("by ", d.author));
+  else chapter.append(el("span", null, "AI story"));
+  if (d.username) chapter.append(personLink("requested by ", d.username));
+  if (d.via) chapter.append(el("span", "via", d.via));
 
   // Opening: the title, centered like a chapter heading, then it fades into the captions
   const intro = el("div", "intro");
@@ -390,8 +628,8 @@ function buildCard(story) {
   likeBtn.addEventListener("click", stop(() => toggleLike(story)));
   commentBtn.addEventListener("click", stop(() => openComments(story)));
   saveBtn.addEventListener("click", stop(() => toggleSave(story)));
-  shareBtn.addEventListener("click", stop(() => shareStory(story)));
-  moreBtn.addEventListener("click", stop(() => reportStory(story)));
+  shareBtn.addEventListener("click", stop(() => shareMenu(story)));
+  moreBtn.addEventListener("click", stop(() => moreMenu(story)));
 
   // Scrubbable progress line + time readout
   const scrub = el("div", "scrub");
@@ -406,7 +644,6 @@ function buildCard(story) {
 
   card.append(media, scrim, chapter, intro, captions, playmark, readbar, scrub, scrubTime, endcard, credit);
   wireTaps(story, card);
-  story.card = card;
   story.els = { media, captions, fill, knob, credit, endcard, likeBtn, commentBtn, saveBtn, pagec };
   story.page = -1;
   observer.observe(card);
@@ -513,6 +750,7 @@ async function toggleLike(story) {
   if (!user()) return needAccount("Create a free account to like stories and build your For You feed.");
   const id = story.data.id, on = !state.liked.has(id);
   on ? state.liked.add(id) : state.liked.delete(id);
+  if (on) learnFrom(story, 1, 1.5);
   story.data.like_count = Math.max(0, (story.data.like_count || 0) + (on ? 1 : -1));
   refreshRail(story);
   if (on) story.els.likeBtn.animate([{ transform: "scale(1)" }, { transform: "scale(1.35)" }, { transform: "scale(1)" }], { duration: 320 });
@@ -526,6 +764,7 @@ async function toggleSave(story) {
   if (!user()) return needAccount("Create a free account to save stories for later.");
   const id = story.data.id, on = !state.saved.has(id);
   on ? state.saved.add(id) : state.saved.delete(id);
+  if (on) learnFrom(story, 1, 1.5);
   refreshRail(story);
   toast(on ? "Saved to your profile" : "Removed from saved");
   const q = on ? window.sb.from("saves").insert({ user_id: user().id, story_id: id })
@@ -541,7 +780,46 @@ async function shareStory(story) {
     if (navigator.share) await navigator.share({ title: story.data.title, text, url });
     else { await navigator.clipboard.writeText(url); toast("Link copied!"); }
     logEvent(story, "share");
+    learnFrom(story, 1, 2);
   } catch {}
+}
+
+/** A small printed menu that slides up over the reading bar. items: [[label, action], ...] */
+function cardMenu(story, title, items) {
+  story.card.querySelector(".report-box")?.remove();
+  const box = el("div", "report-box");
+  box.append(el("strong", null, title));
+  for (const [label, action] of items) {
+    const b = el("button", "btn-secondary", label);
+    b.addEventListener("click", e => { e.stopPropagation(); box.remove(); action(); });
+    box.append(b);
+  }
+  const cancel = el("button", "btn-link", "Cancel");
+  cancel.addEventListener("click", e => { e.stopPropagation(); box.remove(); });
+  box.append(cancel);
+  box.addEventListener("click", e => e.stopPropagation());
+  story.card.append(box);
+}
+function shareMenu(story) {
+  if (!user()) return shareStory(story);
+  cardMenu(story, "Share this story", [
+    ["Send to a friend", () => { pauseReading(); acct().open?.("send", { story: story.data }); }],
+    ["Share a link", () => shareStory(story)],
+  ]);
+}
+window.addEventListener("flyp:sent", e => { const s = state.stories.find(x => x.data.id === e.detail); if (s) learnFrom(s, 1, 2); });
+function moreMenu(story) {
+  const items = [["Not interested", () => notInterested(story)]];
+  if (story.data.author) items.push([`About @${story.data.author}`, () => openUser(story.data.author)]);
+  items.push(["Report this story", () => reportStory(story)]);
+  cardMenu(story, story.data.title, items);
+}
+function notInterested(story) {
+  learnFrom(story, 0, 3);
+  story.learned = true;
+  toast("Got it. You'll see fewer stories like this.");
+  const i = state.stories.indexOf(story);
+  if (i >= 0 && i < state.stories.length - 1) feed.scrollTo({ top: (i + 1) * feed.clientHeight, behavior: "smooth" });
 }
 
 function reportStory(story) {
@@ -608,9 +886,13 @@ async function openComments(story) {
 
 function commentRow(c) {
   const row = el("div", "cmt");
-  row.append(el("div", "av", (c.username || "?")[0].toUpperCase()));
+  const pic = avatar(c);
+  pic.addEventListener("click", () => openUser(c.username));
+  row.append(pic);
   const mid = el("div");
-  mid.append(el("div", "nm", `@${c.username} · ${timeAgo(c.created_at)}`), el("div", "tx", c.body));
+  const name = el("button", "nm", `${c.display_name ? c.display_name + " " : ""}@${c.username} · ${timeAgo(c.created_at)}`);
+  name.addEventListener("click", () => openUser(c.username));
+  mid.append(name, el("div", "tx", c.body));
   const act = el("button", "act", user()?.id === c.user_id ? "Delete" : "Report");
   act.addEventListener("click", () => commentAction(c, row, act.textContent));
   row.append(mid, act);
@@ -641,7 +923,10 @@ commentForm.addEventListener("submit", async e => {
   if (error) return toast(error.message.replace(/^.*?: /, ""));
   commentInput.value = "";
   commentList.querySelector(".fine")?.remove();
-  commentList.prepend(commentRow({ ...data, username: acct().profile?.username || "you" }));
+  const me = acct().profile || {};
+  commentList.prepend(commentRow({ ...data, username: me.username || "you", display_name: me.display_name,
+    avatar_url: me.avatar_hidden ? null : me.avatar_url, profile_color: me.profile_color }));
+  learnFrom(commentStory, 1, 1.5);
   commentStory.data.comment_count = (commentStory.data.comment_count || 0) + 1;
   refreshRail(commentStory);
   document.getElementById("comments-title").textContent = `${formatCount(commentStory.data.comment_count)} comments`;
@@ -676,14 +961,15 @@ document.querySelectorAll("#bottomnav button").forEach(b => b.addEventListener("
   if (nav === "home") { const wasOpen = anySheetOpen(); closeSheets(); if (!wasOpen) feed.scrollTo({ top: 0, behavior: "smooth" }); return; }
   if (nav === "discover") return openDiscover();
   closeSheets();
-  if (nav === "create") return acct().open?.(user() ? "request" : "signup", { reason: "Create an account to request your own stories." });
+  if (nav === "create") return acct().open?.(user() ? "create" : "signup", { reason: "Create an account to post your own stories or request one." });
   if (nav === "inbox") return acct().open?.(user() ? "notifications" : "signup", { reason: "Create an account to get notified when your stories are ready." });
   if (nav === "me") return acct().open?.(user() ? "profile" : "signup");
 }));
 
 // ---------- Background media (lives inside each card) ----------
 function pickVideo(story) {
-  if (story.noVideo || !state.videos.length || (story.seed % 100) / 100 >= VIDEO_SHARE) return null;
+  const share = VIDEO_SHARE[state.settings.bgtype] ?? 0.3;
+  if (story.noVideo || !state.videos.length || (story.seed % 100) / 100 >= share) return null;
   return state.videos[Math.floor(story.seed / 100) % state.videos.length];
 }
 function ensureMedia(story) {
@@ -770,6 +1056,7 @@ function endStory(story) {
   story.card.classList.add("ended");
   story.card.classList.remove("paused");
   logEvent(story, "finish", 1);
+  rememberFinished(story.data.id);
   renderEndcard(story);
 }
 function renderEndcard(story) {
@@ -858,7 +1145,9 @@ function startReading() {
 }
 function beginNarration(story) {
   story.card.classList.add("reading");
-  narrator.play(story.prepared, Math.max(0, story.word), playOpts());
+  // Settings > Favorite narrator > Phone: skip the recording and use the phone's own voice.
+  const prepared = state.settings.voice === "phone" ? { ...story.prepared, audioUrl: null, times: null } : story.prepared;
+  narrator.play(prepared, Math.max(0, story.word), playOpts());
 }
 function pauseReading() {
   state.playing = false;
@@ -884,13 +1173,16 @@ function setActive(index) {
     if (prev.introTimer) { clearTimeout(prev.introTimer); prev.introTimer = null; prev.card.classList.remove("intro-on"); }
     const progress = prev.word > 0 ? prev.word / prev.prepared.words.length : 0;
     if (!prev.ended && prev.startedAt && progress < 0.3) logEvent(prev, "skip", progress);
+    learnFromLeaving(prev);
   }
   state.active = index;
   state.viewed++;
-  state.playing = true;                    // like TikTok: the next story just plays
   if (maybeBreak()) return;
+  // Settings > Feed > Next story: plays by itself, or waits for a tap.
+  state.playing = state.settings.autoplay !== "off" || state.viewed <= 1;
   updateMedia();
-  startReading();
+  if (state.playing) startReading();
+  else { const s = state.stories[index]; s?.card.classList.add("paused"); }
   if (index >= state.stories.length - 3) loadMore().catch(showError);
 }
 
@@ -907,15 +1199,18 @@ function syncActiveFromScroll() {
 // ---------- "Take a break?" (healthier than endless scrolling) ----------
 let breakShowing = false;
 function maybeBreak() {
+  if (state.settings.breaks === "off") return false;
+  const limit = Number(state.settings.breaks) || 25;      // minutes; roughly one story a minute and a half
+  const stories = Math.round(limit * 0.6);
   const mins = (Date.now() - state.lastBreak) / 60000;
-  if (state.viewed < BREAK_AFTER.stories && mins < BREAK_AFTER.minutes) return false;
+  if (state.viewed < stories && mins < limit) return false;
   state.viewed = 0; state.lastBreak = Date.now();
   breakShowing = true;
   narrator.stop(); state.playing = false; updateMedia();
   const card = el("div", "card break-card");
   card.style.cssText = "position:absolute;inset:0;z-index:12;background:rgba(11,8,18,0.94)";
   const layer = el("div", "layer");
-  layer.append(el("div", "break-kicker", `${BREAK_AFTER.stories} stories in`), el("h2", null, "Bookmark it here?"),
+  layer.append(el("div", "break-kicker", `${limit} minutes in`), el("h2", null, "Bookmark it here?"),
     el("p", null, "You've been reading for a while. Stretch, grab some water, or keep going. Your call."));
   const keep = el("button", "btn-primary", "Keep reading");
   const rest = el("button", "btn-secondary", "Take a break");
@@ -963,9 +1258,29 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
 
 // Hooks for account.js
 window.App = {
-  toast, openStory,
+  toast, openStory, avatar, openUser, resetTaste, GENRES,
+  pause: () => pauseReading(),
+  refreshFeed: () => resetFeed().catch(showError),
+  learnSent: id => window.dispatchEvent(new CustomEvent("flyp:sent", { detail: id })),
   onAuth(_acct, opts = {}) {
+    const p = acct().profile;
+    if (p && state.syncedFor !== p.id) {
+      state.syncedFor = p.id;
+      // Settings saved on the account win, so they follow the reader to every device.
+      if (p.settings && Object.keys(p.settings).length) {
+        state.settings = { ...SETTING_DEFAULTS, ...state.settings, ...p.settings };
+        try { localStorage.setItem("flypbook-settings", JSON.stringify(state.settings)); } catch {}
+        applySettings();
+      } else saveSettings();
+      // Keep whichever taste model has learned more (this device's, or the one on the account).
+      if ((p.taste?.seen || 0) > window.taste.seen) {
+        window.taste = new TasteModel(p.taste);
+        window.taste.onChange = syncTaste;
+        window.taste.save();
+      } else if (window.taste.seen) syncTaste();
+    }
     if (!state.booted) return;
+    renderSettings();
     if ((user()?.id || null) !== state.feedUser || opts.genresChanged) resetFeed().catch(showError);
     else showReadyStories();
   },

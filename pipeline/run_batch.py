@@ -24,8 +24,8 @@ import generate_story as g
 # ---------------------------------------------------------------------------
 
 MAX_REQUESTS_PER_RUN = 5  # user requests handled per run
-STORIES_PER_RUN = 2       # regular stories added per run
-BACKFILL_PER_RUN = 3      # older stories without a recording that get narrated each run
+STORIES_PER_RUN = 6       # regular stories added per run (a run also stops early at the free daily limit)
+BACKFILL_PER_RUN = 6      # older stories (and readers' posts) without a recording that get narrated each run
 # Kokoro voices the feed rotates through (listen to voice-samples/ to choose).
 # "a,b" blends two voices.
 VOICES = ["af_heart", "af_heart,af_sky", "am_liam"]
@@ -146,6 +146,18 @@ def backfill_narration():
 # ---------------------------------------------------------------------------
 
 
+def with_fallback(fn, *args, **kwargs):
+    """Run one writing job. If the current model's free daily limit is used up, carry on with the
+    next free model. Raises DailyLimitReached only when every model is used up."""
+    while True:
+        try:
+            return fn(*args, **kwargs)
+        except g.DailyLimitReached as error:
+            print(f"  {error}.")
+            if not g.next_model():
+                raise
+
+
 def process_requests(api_key):
     # Only one run happens at a time, so anything still "processing" is from a run that
     # crashed. Put it back in the queue.
@@ -164,7 +176,7 @@ def process_requests(api_key):
         tone = req["tone"] if req["tone"] in g.TONES else None
 
         try:
-            result = g.generate(api_key, request=req["prompt"], genre=genre, tone=tone, user=username)
+            result = with_fallback(g.generate, api_key, request=req["prompt"], genre=genre, tone=tone, user=username)
         except g.DailyLimitReached as error:
             # Not the request's fault: put it (and the rest of the queue) back for the next run.
             print(f"  {error}. Leaving requests queued for the next run.")
@@ -217,7 +229,7 @@ def generate_regular(api_key):
         print(f"\n--- Regular story {i + 1}/{STORIES_PER_RUN}")
         genre, tone = pick_kind(popular)
         try:
-            result = g.generate(api_key, genre=genre, tone=tone)
+            result = with_fallback(g.generate, api_key, genre=genre, tone=tone)
         except g.DailyLimitReached:
             raise
         except Exception as error:

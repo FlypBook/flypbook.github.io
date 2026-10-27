@@ -56,6 +56,7 @@
       <nav class="feed-tabs" aria-label="Feeds">
         <button data-feed="foryou" aria-current="true">For You</button>
         <button data-feed="latest">Fresh</button>
+        <button data-feed="friends">Friends</button>
         <button id="filter-chip" class="filter-chip" hidden></button>
       </nav>
     </header>
@@ -66,7 +67,7 @@
     <nav id="bottomnav" aria-label="Main">
       <button data-nav="home" aria-current="true" aria-label="Read"><svg viewBox="0 0 24 24" class="ln"><path d="M12 6.5C10.3 5.2 7.9 4.6 4.5 4.8v13c3.4-.2 5.8.4 7.5 1.7 1.7-1.3 4.1-1.9 7.5-1.7v-13c-3.4-.2-5.8.4-7.5 1.7zM12 6.5v13"/></svg><span>Read</span></button>
       <button data-nav="discover" aria-label="Explore"><svg viewBox="0 0 24 24" class="ln"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.4 15.4 4.4 4.4"/></svg><span>Explore</span></button>
-      <button data-nav="create" class="create" aria-label="Request a story"><i><svg viewBox="0 0 24 24" class="ln"><path d="M19.5 4.5c-5.6.3-9.8 3.7-11.6 9.6l-1.4 5.4 4.8-2.6c5.2-2.3 7.9-6.6 8.2-12.4z"/><path d="M7.9 14.1c2.2-1.4 4.2-3.4 5.9-6"/></svg></i><span>Request</span></button>
+      <button data-nav="create" class="create" aria-label="Write or request a story"><i><svg viewBox="0 0 24 24" class="ln"><path d="M19.5 4.5c-5.6.3-9.8 3.7-11.6 9.6l-1.4 5.4 4.8-2.6c5.2-2.3 7.9-6.6 8.2-12.4z"/><path d="M7.9 14.1c2.2-1.4 4.2-3.4 5.9-6"/></svg></i><span>Write</span></button>
       <button data-nav="inbox" aria-label="Inbox"><svg viewBox="0 0 24 24" class="ln"><path d="M6.2 9.3a5.8 5.8 0 0 1 11.6 0c0 5.6 2.2 7.2 2.2 7.2H4s2.2-1.6 2.2-7.2zM10.2 19.6a2 2 0 0 0 3.6 0"/></svg><span>Inbox</span><b class="badge" hidden></b></button>
       <button data-nav="me" aria-label="Profile"><svg viewBox="0 0 24 24" class="ln"><circle cx="12" cy="8.3" r="3.8"/><path d="M4.8 20c1.2-3.5 3.8-5.4 7.2-5.4s6 1.9 7.2 5.4"/></svg><span>Me</span></button>
     </nav>
@@ -96,31 +97,14 @@
         <h2>Settings</h2>
         <button id="settings-close" class="icon-btn" aria-label="Close settings">&times;</button>
       </div>
-      <div class="setting">
-        <span>Narration</span>
-        <div class="seg" data-setting="narration">
-          <button data-value="on">Voice on</button><button data-value="off">Read silently</button>
-        </div>
-      </div>
-      <div class="setting">
-        <span>Speed</span>
-        <div class="seg" data-setting="rate">
-          <button data-value="0.8">0.8×</button><button data-value="1">1×</button>
-          <button data-value="1.2">1.2×</button><button data-value="1.5">1.5×</button>
-        </div>
-      </div>
-      <div class="setting">
-        <span>Background video</span>
-        <div class="seg" data-setting="bg">
-          <button data-value="on">On</button><button data-value="dim">Dim</button><button data-value="off">Off</button>
-        </div>
-      </div>
+      <!-- Filled in by app.js (renderSettings) -->
+      <div id="settings-body"></div>
       <div class="setting" id="install-row" hidden>
         <span>Get the app</span>
         <button class="btn-primary" hidden>Install FlypBook</button>
         <p class="fine" hidden>On iPhone: tap the Share button, then <b>Add to Home Screen</b>.</p>
       </div>
-      <p class="fine">Every story is written by AI and checked for safety. Background videos from
+      <p class="fine">Stories are written by AI or posted by readers, and every one is checked for safety. Background videos from
         <a href="https://pixabay.com" target="_blank" rel="noopener">Pixabay</a>.
         <a href="privacy.html" target="_blank">Privacy policy</a>.</p>
     </section>
@@ -139,7 +123,9 @@
   <script src="gameplay.js?v=BUILD"></script>
   <script type="module" src="game3d_more.js?v=BUILD"></script>
   <script src="narrator.js?v=BUILD"></script>
+  <script src="taste.js?v=BUILD"></script>
   <script src="app.js?v=BUILD"></script>
   <script type="module" src="account.js?v=BUILD"></script>
+  <script type="module" src="social.js?v=BUILD"></script>
 </body>
 </html>

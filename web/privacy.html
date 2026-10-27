@@ -36,7 +36,11 @@
     <li><b>Preferences:</b> the kinds of stories you pick as favorites.</li>
     <li><b>Activity:</b> stories you like, share, finish, or skip, your quiz answers, points, streaks, and reading level. These personalize your For You feed.</li>
     <li><b>Requests:</b> story ideas you submit, and notifications about them.</li>
-    <li><b>Reports:</b> stories you report and any reason you give.</li>
+    <li><b>Reports:</b> stories, comments, and profile photos you report, and any reason you give.</li>
+    <li><b>Profile:</b> anything you add: a display name, pronouns, a bio, a profile color, and a profile photo (shrunk to 256x256 on your phone before upload). These are public.</li>
+    <li><b>Friends:</b> who you follow, who follows you, who you block, and stories you send to friends. Your likes are shown to friends only, unless you change that in Edit profile.</li>
+    <li><b>Your stories:</b> stories you post. Once they pass the safety check they're public, credited to your username, until you delete them.</li>
+    <li><b>Settings and taste:</b> your app settings and the small "taste" model that learns which stories you enjoy (kinds, length, narrator, background). It's saved on your phone, and on your account if you're signed in, and is only used to order your own feed.</li>
   </ul>
   <p>Without an account, you can read every story. Your settings (like narration speed) are saved only on your device.</p>
 
@@ -44,7 +48,7 @@
   <ul>
     <li>To run your account, points, streaks, and personalized feed.</li>
     <li>To write requested stories. Requests are sent to an AI service to generate a story, and the finished story is shared with everyone, credited to your username.</li>
-    <li>To keep FlypBook safe. Every story and request is checked for unsafe content, and reported stories are hidden for review.</li>
+    <li>To keep FlypBook safe. Every story, request, and posted story is checked for unsafe content, and reported stories, comments, and photos are hidden for review.</li>
   </ul>
 
   <h2>AI-generated content</h2>
@@ -53,7 +57,7 @@
   <h2>Who handles data for us</h2>
   <ul>
     <li><b>Supabase:</b> our database and login provider.</li>
-    <li><b>Groq:</b> the AI service that writes stories (it receives story requests, not your email or account details).</li>
+    <li><b>Groq:</b> the AI service that writes stories and checks posted stories for safety (it receives story text and requests, not your email or account details).</li>
     <li><b>GitHub:</b> hosts the app and runs the story job.</li>
     <li><b>jsDelivr:</b> delivers some open-source code the app uses.</li>
     <li><b>Google Fonts:</b> delivers the caption fonts (your browser downloads them; no account info is shared).</li>

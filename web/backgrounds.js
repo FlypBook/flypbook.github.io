@@ -267,9 +267,14 @@ function pickScene(seed) {
   if (match) return match.cls;
   // When the 3D scenes are available, they replace their flat 2D stand-ins.
   const has3d = SCENES.some(s => s.cls.webgl);
-  const pool = SCENES.filter(s => !(has3d && s.fallback));
-  const total = pool.reduce((n, s) => n + s.weight, 0);
+  let pool = SCENES.filter(s => !(has3d && s.fallback));
+  // app.js sets window.FlypScenes: which scenes the reader's settings allow, and how much their
+  // taste model says they enjoy each one (scenes they watch longer show up more).
+  const prefs = window.FlypScenes;
+  if (prefs) { const allowed = pool.filter(s => prefs.allow(s.cls.name)); if (allowed.length) pool = allowed; }
+  const weight = s => s.weight * (prefs ? prefs.weight(s.cls.name) : 1);
+  const total = pool.reduce((n, s) => n + weight(s), 0);
   let roll = (mulberry32(seed)() * total);
-  for (const s of pool) { roll -= s.weight; if (roll <= 0) return s.cls; }
+  for (const s of pool) { roll -= weight(s); if (roll <= 0) return s.cls; }
   return pool[0].cls;
 }

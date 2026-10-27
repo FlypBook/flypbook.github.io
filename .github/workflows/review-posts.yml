@@ -1,0 +1,33 @@
+# FlypBook: Scroll Like Shakespeare
+# Checks stories that readers post in the app and publishes the safe ones. Free for public repos.
+# When nobody has posted, a run finishes in a few seconds.
+name: Review posted stories
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"  # every 30 minutes
+  workflow_dispatch:
+
+concurrency:
+  group: review-posts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Review and publish posts
+        working-directory: pipeline
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python review_posts.py
