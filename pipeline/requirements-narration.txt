@@ -1,0 +1,7 @@
+# Only needed for AI-voice narration (narrate.py). Story writing itself needs nothing extra.
+# CPU-only PyTorch is much smaller than the default download.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+kokoro
+lameenc
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl

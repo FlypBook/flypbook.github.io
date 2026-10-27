@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0812">
+  <title>FlypBook: Scroll Like Shakespeare</title>
+  <meta name="description" content="Scroll Like Shakespeare. Short stories you read along with, one swipe at a time.">
+  <meta property="og:title" content="FlypBook: Scroll Like Shakespeare">
+  <meta property="og:description" content="Scroll Like Shakespeare. Short stories you read along with, one swipe at a time.">
+  <meta property="og:type" content="website">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Reusable logo mark: a book with a page mid-flip -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="fb-grad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#c084fc"/><stop offset="1" stop-color="#8b5cf6"/>
+      </linearGradient>
+      <symbol id="fb-mark" viewBox="0 0 32 32">
+        <rect x="2" y="4" width="28" height="24" rx="6" fill="url(#fb-grad)"/>
+        <path d="M16 9v15" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+        <path d="M16 9c-2.5-1.3-5.5-1.6-9-1v15c3.5-.6 6.5-.3 9 1" fill="#fff" opacity=".9"/>
+        <path d="M16 9c2.2-2.6 5.4-4 9.5-4.2v15c-4.1.2-7.3 1.6-9.5 4.2" fill="#ffd43b"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <div id="app">
+    <header id="topbar">
+      <span class="logo"><svg class="logo-mark"><use href="#fb-mark"/></svg><span>Flyp<b>Book</b></span></span>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.2" fill="#15101f"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.2" fill="#15101f"/></svg>
+      </button>
+    </header>
+
+    <main id="feed" aria-label="Stories"></main>
+
+    <section id="settings" class="sheet" hidden aria-label="Settings">
+      <div class="grabber"></div>
+      <div class="sheet-head">
+        <h2>Settings</h2>
+        <button id="settings-close" class="icon-btn" aria-label="Close settings">&times;</button>
+      </div>
+      <div class="setting">
+        <span>Narration</span>
+        <div class="seg" data-setting="narration">
+          <button data-value="on">Voice on</button><button data-value="off">Read silently</button>
+        </div>
+      </div>
+      <div class="setting">
+        <span>Speed</span>
+        <div class="seg" data-setting="rate">
+          <button data-value="0.8">0.8×</button><button data-value="1">1×</button>
+          <button data-value="1.2">1.2×</button><button data-value="1.5">1.5×</button>
+        </div>
+      </div>
+      <div class="setting">
+        <span>Background video</span>
+        <div class="seg" data-setting="bg">
+          <button data-value="on">On</button><button data-value="dim">Dim</button><button data-value="off">Off</button>
+        </div>
+      </div>
+      <p class="fine">Every story is written by AI and checked for safety. Background videos from
+        <a href="https://pixabay.com" target="_blank" rel="noopener">Pixabay</a>.</p>
+    </section>
+
+    <div id="splash" role="status">
+      <svg class="splash-mark"><use href="#fb-mark"/></svg>
+      <div class="splash-logo">Flyp<b>Book</b></div>
+      <div class="splash-tag">Scroll Like Shakespeare</div>
+      <div class="splash-status" id="splash-status">Loading stories…</div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="backgrounds.js"></script>
+  <script src="gameplay.js"></script>
+  <script type="module" src="game3d_more.js"></script>
+  <script src="narrator.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

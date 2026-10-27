@@ -4,4 +4,8 @@
 
 # Local test output
 pipeline/output/
+voice-samples/
+web/_test/
+incoming-videos/
+picklist.html
 __pycache__/

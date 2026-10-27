@@ -24,6 +24,10 @@ import generate_story as g
 
 MAX_REQUESTS_PER_RUN = 5  # user requests handled per run
 STORIES_PER_RUN = 2       # regular stories added per run
+BACKFILL_PER_RUN = 3      # older stories without a recording that get narrated each run
+# Kokoro voices the feed rotates through (listen to voice-samples/ to choose).
+# "a,b" blends two voices.
+VOICES = ["af_heart", "af_heart,af_sky", "am_liam"]
 
 # ---------------------------------------------------------------------------
 # Supabase helpers (plain HTTPS calls to Supabase's REST API)
@@ -91,7 +95,49 @@ def publish(record, requested_by=None):
     supabase("POST", "story_answers", body={
         "story_id": story["id"], "answer_index": q["answer_index"], "explanation": q["explanation"],
     })
+    add_narration(story["id"], record["story"])
     return story["id"]
+
+
+def add_narration(story_id, body):
+    """Record the story with the AI voice and attach it. If anything fails, the story still
+    works: the app falls back to the phone's built-in voice."""
+    try:
+        import narrate
+    except ImportError:
+        print("  (Narration skipped: Kokoro isn't installed here.)")
+        return False
+    try:
+        # Same story always gets the same voice; different stories spread across the list.
+        voice = VOICES[int(story_id.replace("-", ""), 16) % len(VOICES)]
+        print(f"  Recording narration ({voice})...")
+        mp3, times, seconds = narrate.synthesize(body, voice)
+        path = f"narration/{story_id}.mp3"
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/storage/v1/object/{path}", data=mp3, method="POST",
+            headers={"apikey": SUPABASE_KEY, "Content-Type": "audio/mpeg", "x-upsert": "true",
+                     **({} if SUPABASE_KEY.startswith("sb_") else {"Authorization": f"Bearer {SUPABASE_KEY}"})})
+        urllib.request.urlopen(req, timeout=120).read()
+        supabase("PATCH", "stories", f"id=eq.{story_id}", {
+            "audio_url": f"{SUPABASE_URL}/storage/v1/object/public/{path}",
+            "word_times": times,
+        })
+        print(f"  Narration added ({seconds:.0f}s, {len(mp3) // 1024} KB).")
+        return True
+    except Exception as error:
+        detail = error.read().decode("utf-8", "replace")[:300] if hasattr(error, "read") else error
+        print(f"  Narration failed: {detail}")
+        return False
+
+
+def backfill_narration():
+    """Narrate a few older stories that don't have a recording yet."""
+    rows = supabase("GET", "stories",
+                    f"select=id,body&audio_url=is.null&status=eq.published&order=created_at.desc"
+                    f"&limit={BACKFILL_PER_RUN}")
+    for row in rows:
+        print(f"\n--- Narrating older story {row['id']}")
+        add_narration(row["id"], row["body"])
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +203,10 @@ def main():
     api_key = g.load_api_key()
     from_requests = process_requests(api_key)
     regular = generate_regular(api_key)
+    try:
+        backfill_narration()
+    except Exception as error:
+        print(f"Backfill skipped: {error}")
     print(f"\nDone. Published {from_requests} requested + {regular} regular stories.")
     # Fail the GitHub Actions run (so you get an email) if nothing at all was published.
     if from_requests + regular == 0 and STORIES_PER_RUN > 0:

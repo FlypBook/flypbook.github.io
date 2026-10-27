@@ -18,13 +18,26 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pipeline/requirements-narration.txt
+
+      # Keep the downloaded voice model between runs so it isn't fetched every time.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-model-v1
+
+      - name: Install the AI voice (Kokoro)
+        run: |
+          sudo apt-get install -y -qq espeak-ng > /dev/null
+          pip install --quiet -r pipeline/requirements-narration.txt
 
       - name: Generate and publish stories
         working-directory: pipeline
