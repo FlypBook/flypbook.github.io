@@ -86,7 +86,10 @@ class Narrator {
       (/en[-_]US/i.test(v.lang) ? 4 : 0) +
       (/samantha|aria|jenny|guy|google us english/i.test(v.name) ? 3 : 0) +
       (v.localService ? 1 : 0) + (v.default ? 1 : 0);
-    this.voice = voices.sort((a, b) => score(b) - score(a))[0];
+    // Keep the best few English voices; each story picks one (story.voiceSeed), so the
+    // phone's own voice changes from story to story too.
+    this.voices = voices.sort((a, b) => score(b) - score(a)).slice(0, 4);
+    this.voice = this.voices[0];
   }
 
   get hasVoice() {
@@ -177,7 +180,8 @@ class Narrator {
     const chunk = chunks[ci];
     const offset = words[from].start;
     const u = new SpeechSynthesisUtterance(chunk.text.slice(offset));
-    if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else { u.lang = "en-US"; }
+    const voice = this.voices?.length ? this.voices[(this.story.voiceSeed || 0) % this.voices.length] : this.voice;
+    if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = "en-US"; }
     u.rate = this.rate;
 
     let gotBoundary = false;

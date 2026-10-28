@@ -104,8 +104,8 @@ const SETTINGS_UI = [
     summary: () => state.settings.narration === "off" ? "Reading silently" : `Voice on · ${state.settings.rate}× speed`, items: [
     ["narration", "Narration", [["on", "Voice on"], ["off", "Read silently"]]],
     ["rate", "Speed", [["0.8", "0.8×"], ["1", "1×"], ["1.2", "1.2×"], ["1.5", "1.5×"]]],
-    ["voice", "Favorite narrator", [["any", "Any"], ["af_heart", "Heart"], ["af_heart,af_sky", "Sky"], ["am_liam", "Liam"], ["phone", "Phone"]],
-      "Stories read by your favorite show up more. Phone uses your phone's own voice for every story."],
+    ["voice", "Narrator", [["any", "Mix"], ["af_heart", "Heart"], ["af_heart,af_sky", "Sky"], ["am_liam", "Liam"], ["phone", "Phone"]],
+      "Mix changes the voice with every story. Pick one to hear that narrator more often. Phone uses your phone's own voice."],
   ] },
   { id: "captions", title: "Captions", color: "#2c5aa0",
     summary: () => `Size ${state.settings.capsize.toUpperCase()} · ${state.settings.capstyle === "classic" ? "Always classic" : "New look each story"}`, items: [
@@ -380,7 +380,8 @@ async function loadMore() {
       if (rows.length < PAGE_SIZE) state.done = true;
       rows = rows.filter(allowed);
     }
-    await addStories(rows.filter(r => !state.stories.some(s => s.data.id === r.id)));
+    rows = rows.filter(r => !state.stories.some(s => s.data.id === r.id));
+    await addStories(spreadVoices(rows, state.stories.at(-1)?.data));
     if (state.done) {
       if (state.mode === "friends" && !state.stories.length) addMessageCard("Your Friends feed is empty", "Follow people from Inbox > Friends. Stories they post and like show up here.");
       else addMessageCard("You're all caught up", "New stories drop every few hours. Come back soon.");
@@ -388,6 +389,23 @@ async function loadMore() {
   } finally {
     state.loading = false;
   }
+}
+
+/** Narrator "Mix": order stories so the next one never has the same voice as the one before.
+ *  (Each story is recorded once in one of the voices; stories without a recording use the phone's voice.) */
+function spreadVoices(rows, prev) {
+  if (state.settings.voice !== "any") return rows;
+  const voice = r => TasteModel.voiceOf(r) || "phone";
+  const pool = [...rows], out = [];
+  let last = prev ? voice(prev) : null;
+  while (pool.length) {
+    let i = pool.findIndex(r => voice(r) !== last);   // the best-ranked story with a different voice
+    if (i < 0) i = 0;
+    const [r] = pool.splice(i, 1);
+    out.push(r);
+    last = voice(r);
+  }
+  return out;
 }
 
 /** Public names and pictures for requesters and writers. */
@@ -404,6 +422,7 @@ function makeStory(row, names, pinned = false) {
   const prepared = prepareStory(row.body);
   prepared.audioUrl = row.audio_url || null;
   prepared.times = row.word_times || null;
+  prepared.voiceSeed = hash(row.id);   // stories without a recording still get varied phone voices
   const data = { ...row, username: names[row.requested_by]?.username, author: names[row.author_id]?.username, authorProfile: names[row.author_id] };
   const story = { data, prepared, word: -1, ended: false, pinned };
   story.seed = hash(row.id);

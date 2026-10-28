@@ -3,7 +3,8 @@
 // (supabase/006_rewards.sql), so XP can't be faked. Guests: the same rules run on this phone.
 //
 // Carrots: XP for finishing (+20), right answers (+15, x2 on a 3-in-a-row combo), the daily goal (+30),
-//          likes (+2) and comments (+5); levels with titles; unlockable highlight colors and narrators.
+//          likes (+2) and comments (+5); levels with titles; unlockable highlight colors and profile frames.
+//          (Narrator voices are never locked.)
 // Sticks:  only finished stories fill the goal ring; the streak ends at midnight unless you hit your
 //          goal (the ring warns you after 8 PM); a wrong answer breaks the combo. Never taken away: XP.
 
@@ -16,11 +17,8 @@ const TITLES = ["First Page", "Page-Turner", "Bookworm", "Chapter Chaser", "Stor
 // What each level unlocks. "setting" entries unlock one option in Settings.
 const UNLOCKS = [
   { level: 2, label: "Lilac highlight", setting: ["hlcolor", "#bba6f2"] },
-  { level: 2, label: "The Heart narrator as your favorite", setting: ["voice", "af_heart"] },
   { level: 3, label: "Coral highlight", setting: ["hlcolor", "#ff8a65"] },
-  { level: 3, label: "The Sky narrator as your favorite", setting: ["voice", "af_heart,af_sky"] },
   { level: 4, label: "Mint highlight", setting: ["hlcolor", "#9fe3b8"] },
-  { level: 5, label: "The Liam narrator as your favorite", setting: ["voice", "am_liam"] },
   { level: 5, label: "An ink frame around your profile picture" },
   { level: 8, label: "A gold frame around your profile picture" },
   { level: 11, label: "The title Shakespeare, in gold" },
