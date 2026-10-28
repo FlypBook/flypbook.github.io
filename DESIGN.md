@@ -7,7 +7,7 @@ Every screen is either **the story** (dark, full-bleed, the words are the hero) 
 - **Apple Music lyrics:** the words *are* the interface. Unread words dim, read words full, one active word.
   No outlines, no meme text. Big, heavy, tight type.
 - **Old paperback covers (the tri-band cover):** a flat band of printed ink color per genre, a title in a serif.
-  Color carries meaning (genre), never decoration. Our story intro is a little paperback cover.
+  Color carries meaning (genre), never decoration. Each story shows its genre band next to its title.
 - **Letterboxd / Spotify / Duolingo:** one owned color, used flat and confidently. Saturated, not glowing.
 - **Are.na / Teenage Engineering:** plain words over icons where possible, honest copy, no ornaments.
 - **Partiful / Wattpad:** a voice. Short, human labels ("Write", "Fresh"), sentence case.
@@ -40,7 +40,7 @@ Genre inks (the band on each cover) live in `web/app.js` (`GENRE_INK`).
 **Type:** Young Serif for the literary voice (wordmark, story titles, sheet titles, page numbers, quiz
 questions). Archivo for everything else: 600-800 for UI, condensed (wdth 75) black for punchy labels.
 **Radius scale:** 6 (chips, fields), 12 (buttons, cards), 18 (sheet top), round (avatars, the Write button).
-**Motion:** quick and physical: 180-320ms, ease-out `cubic-bezier(.2,.9,.25,1)`. The intro cover turns like a page.
+**Motion:** quick and physical: 180-320ms, ease-out `cubic-bezier(.2,.9,.25,1)`. Stories start immediately (no intro card); the title sits bottom-left.
 
 ## Light and dark (Settings > Appearance: Auto / Light / Dark)
 Stories always play on night (they sit on video). The theme changes the *pages* (sheets), the dock and the
