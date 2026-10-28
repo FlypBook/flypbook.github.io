@@ -345,6 +345,9 @@ function filterQuery() {
   else if (s.hide.length) q.push(`genre=not.in.(${s.hide.map(g => encodeURIComponent(`"${g}"`)).join(",")})`);
   if (s.length === "short") q.push(`est_read_seconds=lt.${SHORT_SECONDS}`);
   if (s.length === "long") q.push(`est_read_seconds=gte.${SHORT_SECONDS}`);
+  // Only stories that already have their AI recording: the phone's built-in voices sound robotic.
+  // (New stories appear once the story job has recorded them. Settings > Narrator > Phone shows everything.)
+  if (s.voice !== "phone" && optional.includes("audio_url")) q.push("audio_url=not.is.null");
   return q.length ? "&" + q.join("&") : "";
 }
 /** Client-side filters (Settings > Feed > Stories by readers). */
@@ -422,7 +425,6 @@ function makeStory(row, names, pinned = false) {
   const prepared = prepareStory(row.body);
   prepared.audioUrl = row.audio_url || null;
   prepared.times = row.word_times || null;
-  prepared.voiceSeed = hash(row.id);   // stories without a recording still get varied phone voices
   const data = { ...row, username: names[row.requested_by]?.username, author: names[row.author_id]?.username, authorProfile: names[row.author_id] };
   const story = { data, prepared, word: -1, ended: false, pinned };
   story.seed = hash(row.id);

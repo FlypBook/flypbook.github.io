@@ -6,15 +6,15 @@ Each run (every 30 minutes on GitHub Actions, or locally with:  python review_po
   2. The AI checks each one for safety, privacy, and copying, and writes a quiz question for it.
   3. Approved posts are published credited to their writer, who gets a notification
      (and so do followers who want to hear about new posts). Rejected ones get a short reason.
-The 4-hourly story job records the AI narration for published posts later; until then the app
-reads them with the phone's own voice.
+Approved posts are recorded with the AI voice right away (the feed only shows recorded stories);
+if that fails, the 4-hourly story job records them later.
 """
 
 import json
 import sys
 
 import generate_story as g
-from run_batch import now, notify, supabase
+from run_batch import add_narration, now, notify, supabase
 
 POSTS_PER_RUN = 10
 MIN_POST_WORDS = 120
@@ -143,6 +143,7 @@ def main():
                 break
         if verdict["approved"]:
             story_id = publish_post(post, verdict)
+            add_narration(story_id, post["body"])   # the feed only shows stories with an AI recording
             supabase("PATCH", "story_submissions", f"id=eq.{post['id']}",
                      {"status": "approved", "story_id": story_id, "processed_at": now(), "reason": verdict["notes"][:500] or None})
             notify(post["user_id"], "post_approved", f"Your story \"{post['title']}\" is live! {verdict['reason']}"[:300], story_id)

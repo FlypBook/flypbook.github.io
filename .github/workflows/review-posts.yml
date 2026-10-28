@@ -24,7 +24,31 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pipeline/requirements-narration.txt
+      # Only install the AI voice when someone has actually posted (most runs finish in seconds).
+      - name: Any posts waiting?
+        id: queue
+        working-directory: pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          n=$(python -c "from run_batch import supabase; print(len(supabase('GET','story_submissions','select=id&status=in.(pending,processing)&limit=50') or []))")
+          echo "waiting=$n" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: steps.queue.outputs.waiting != '0'
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-model-v1
+      - name: Install the AI voice (Kokoro)
+        if: steps.queue.outputs.waiting != '0'
+        run: |
+          sudo apt-get install -y -qq espeak-ng > /dev/null
+          pip install --quiet -r pipeline/requirements-narration.txt
       - name: Review and publish posts
+        if: steps.queue.outputs.waiting != '0'
         working-directory: pipeline
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
