@@ -31,7 +31,7 @@ API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Google's Gemini API (free key from aistudio.google.com, no card) writes far more natural fiction than the free
 # Groq models. Model names start with "gemini:". Without a GEMINI_API_KEY the writer stays on Groq.
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-GEMINI_WRITER = "gemini:gemini-flash-latest"
+GEMINI_WRITER = "gemini:gemini-3.5-flash"   # tested 2026-10-28: fast and natural; newer Flash versions timed out or were locked
 WRITER_MODEL = "openai/gpt-oss-120b"  # writes the stories
 REVIEW_MODEL = "openai/gpt-oss-120b"  # safety + logic checks
 # Free models to fall back on, in order. Each one has its own free daily limit, so when one is
@@ -328,7 +328,7 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with urllib.request.urlopen(request, timeout=300 if on_gemini else 120) as response:
                 data = json.loads(response.read().decode("utf-8"))
             global TOKENS_USED
             TOKENS_USED += (data.get("usage") or {}).get("total_tokens", 0)
@@ -360,6 +360,11 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
                     raise DailyLimitReached(f"Groq daily limit reached (asked to wait {wait}s)") from None
                 print(f"  Rate limited, waiting {wait}s...")
                 time.sleep(wait)
+                continue
+            # Gemini sometimes says it's "experiencing high demand" for a moment.
+            if error.code in (500, 503) and attempt < 4:
+                print(f"  {model} is busy, trying again in 30s...")
+                time.sleep(30)
                 continue
             # Groq occasionally returns an empty "invalid JSON" generation, usually when the model
             # thinks too long. Ask again, thinking less.
@@ -524,25 +529,9 @@ def save(record, folder):
 # ---------------------------------------------------------------------------
 
 
-def generate(api_key, request=None, genre=None, tone=None, reading_level=None, user=None, model=None):
-    model = model or WRITER_MODEL
-    created_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-
-    # 1. Check the user's request BEFORE generating anything.
-    if request:
-        request = request.strip()[:MAX_REQUEST_CHARS]
-        if REQUEST_BLOCKLIST.search(request):
-            safety = {"safe": False, "categories": ["blocked word"], "reason": "Matched the local blocklist."}
-        else:
-            print("Checking request safety...")
-            safety = check_safety(api_key, request, "story request from a user")
-        if not safety["safe"]:
-            path = save({"type": "rejected_request", "request": request, "requested_by": user,
-                         "safety": safety, "created_at": created_at}, REJECTED_DIR)
-            print(f"REQUEST REJECTED: {safety['reason']}\nSaved to {path}")
-            return {"status": "rejected", "reason": safety["reason"]}
-
-    # Pick a believable situation (story_seeds.py), the kind of post, and who's posting.
+def build_prompt(request=None, genre=None, tone=None, reading_level=None):
+    """Pick a believable situation (story_seeds.py), the kind of post, and who's posting.
+    Returns (genre, tone, reading_level, user_prompt)."""
     if request:
         genre = genre or random.choice(GENRES)
         premise = None
@@ -566,6 +555,28 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
         # The premises already mix two everyday areas and carry a hook, the other side, and a late turn.
         user_prompt += (f"Situation to build on. Keep its hook, the other side's reason, and the turn; change the names, "
                         f"amounts, places, and details so it's your own:\n{premise}\n")
+    return genre, tone, reading_level, user_prompt
+
+
+def generate(api_key, request=None, genre=None, tone=None, reading_level=None, user=None, model=None):
+    model = model or WRITER_MODEL
+    created_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+    # 1. Check the user's request BEFORE generating anything.
+    if request:
+        request = request.strip()[:MAX_REQUEST_CHARS]
+        if REQUEST_BLOCKLIST.search(request):
+            safety = {"safe": False, "categories": ["blocked word"], "reason": "Matched the local blocklist."}
+        else:
+            print("Checking request safety...")
+            safety = check_safety(api_key, request, "story request from a user")
+        if not safety["safe"]:
+            path = save({"type": "rejected_request", "request": request, "requested_by": user,
+                         "safety": safety, "created_at": created_at}, REJECTED_DIR)
+            print(f"REQUEST REJECTED: {safety['reason']}\nSaved to {path}")
+            return {"status": "rejected", "reason": safety["reason"]}
+
+    genre, tone, reading_level, user_prompt = build_prompt(request, genre, tone, reading_level)
 
     last_problem = "unknown"
     best = None    # the most engaging draft that was safe and made sense, in case none hits the full bar
