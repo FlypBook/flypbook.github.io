@@ -79,3 +79,7 @@ Requirements that every phase must follow. The full original phase plan lives in
 - The whole look is now defined in `DESIGN.md` (read it before changing any UI): night story screens + cream paper pages, one owned purple (Grape #5B2FB3 / Lilac #BBA6F2, not Tailwind's violet), printed genre inks, Archivo + Young Serif, sentence-case labels, no glows/gradients/glass, no tracked-out uppercase labels.
 - Each story opens with a little paperback cover in its genre's ink that turns in like a page; the meta line has the same ink band. Captions follow the Apple Music lyrics idea (words ahead slightly quieter). The dock is a solid full-width black bar with one grape Write button. Splash and app icon use the grape tile.
 - `web/_test/mock.js` fakes a signed-in reader locally (never deployed) so account screens can be reviewed.
+
+## Leaner story writer + info at the bottom (2026-10-27)
+- No title card before a story anymore; the title, genre band, length and writer sit bottom-left above the reading bar, and the words start right away.
+- To fit more stories into the free daily token limits: one draft + one review per attempt (the separate editor pass is off, `EDITOR_PASS`), light "thinking" (`DRAFT_THINKING`/`REVIEW_THINKING` = low), 2 attempts max, hook bar 7 instead of 8. The fallback model is gpt-oss-20b, whose replies are read with `extract_json()` instead of Groq's strict JSON mode (that mode kept failing). qwen3.8-27b was dropped: its free plan can't fit one story. Each run prints tokens used per story.

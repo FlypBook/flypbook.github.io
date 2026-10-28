@@ -673,25 +673,17 @@ function buildCard(story) {
   const media = el("div", "media");
   const scrim = el("div", "scrim");
 
-  // Meta line: the genre's ink band, how long, who wrote or asked for it
+  // Story info, bottom left: title, then the genre's ink band, length, and who wrote or asked for it
   const [ink, tone] = genreInk(d.genre);
   card.style.setProperty("--band", ink);
   const chapter = el("div", "chapter");
-  chapter.append(el("span", `band${tone ? " " + tone : ""}`, d.genre), el("span", null, `${minutes(d.est_read_seconds)} read`));
-  if (d.source === "user" && d.author) chapter.append(personLink("by ", d.author));
-  else chapter.append(el("span", null, "AI story"));
-  if (d.username) chapter.append(personLink("requested by ", d.username));
-  if (d.via) chapter.append(el("span", "via", d.via));
-
-  // Opening: a little paperback cover (genre band, title, writer) turns in, then the words start
-  const intro = el("div", "intro");
-  const cover = el("div", "cover");
-  const band = el("div", `cover-band${tone ? " " + tone : ""}`);
-  band.append(el("span", "cover-kind", d.genre), el("span", "cover-mark", "F"));
-  const foot = el("div", "cover-foot");
-  foot.append(el("span", null, d.source === "user" && d.author ? `@${d.author}` : "FlypBook"), el("span", null, LEVEL_LABEL[d.reading_level] || minutes(d.est_read_seconds)));
-  cover.append(band, el("h2", null, d.title), foot);
-  intro.append(cover);
+  const meta = el("div", "meta");
+  meta.append(el("span", `band${tone ? " " + tone : ""}`, d.genre), el("span", null, `${minutes(d.est_read_seconds)} read`));
+  if (d.source === "user" && d.author) meta.append(personLink("by ", d.author));
+  else meta.append(el("span", null, "AI story"));
+  if (d.username) meta.append(personLink("requested by ", d.username));
+  if (d.via) meta.append(el("span", "via", d.via));
+  chapter.append(el("h3", "story-title", d.title), meta);
   const captions = el("div", "captions");
 
   const playmark = el("div", "playmark");
@@ -726,7 +718,7 @@ function buildCard(story) {
   endcard.addEventListener("click", e => e.stopPropagation());
   const credit = el("div", "credit-line");
 
-  card.append(media, scrim, chapter, intro, captions, playmark, readbar, scrub, scrubTime, endcard, credit);
+  card.append(media, scrim, chapter, captions, playmark, readbar, scrub, scrubTime, endcard, credit);
   wireTaps(story, card);
   story.els = { media, captions, fill, knob, credit, endcard, likeBtn, commentBtn, saveBtn, pagec };
   story.page = -1;
@@ -1207,7 +1199,6 @@ function showAnswer(story, res, choice) {
 
 // ---------- Playback: pause/play controls the voice AND the background together ----------
 const playOpts = () => ({ rate: Number(state.settings.rate), narration: state.settings.narration === "on" });
-const INTRO_MS = 1700;
 
 function startReading() {
   const story = state.stories[state.active];
@@ -1217,16 +1208,6 @@ function startReading() {
   story.card.classList.remove("paused");
   story.startedAt = story.startedAt || Date.now();
   updateMedia();
-  // First time on a story: show its title like a chapter heading, then start reading.
-  if (!story.introDone) {
-    story.introDone = true;
-    story.card.classList.add("intro-on");
-    story.introTimer = setTimeout(() => {
-      story.card.classList.remove("intro-on");
-      if (state.stories[state.active] === story && state.playing) beginNarration(story);
-    }, INTRO_MS);
-    return;
-  }
   beginNarration(story);
 }
 function beginNarration(story) {

@@ -32,7 +32,10 @@ WRITER_MODEL = "openai/gpt-oss-120b"  # writes the stories
 REVIEW_MODEL = "openai/gpt-oss-120b"  # safety + logic checks
 # Free models to fall back on, in order. Each one has its own free daily limit, so when one is
 # used up the batch switches to the next instead of stopping for the day (see next_model()).
-MODEL_CHAIN = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+# (qwen3.8-27b was dropped: its free plan caps replies at ~1,000 tokens a minute, less than one story.)
+MODEL_CHAIN = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+# Models whose strict JSON mode fails too often; their replies are parsed by extract_json() instead.
+LOOSE_JSON_MODELS = {"openai/gpt-oss-20b"}
 
 GENRES = [
     "aita",                 # "Am I the jerk?" style dilemmas
@@ -122,7 +125,12 @@ MIN_WORDS = 300
 MAX_WORDS = 620
 WORDS_PER_MINUTE = 150
 
-MAX_ATTEMPTS = 3  # how many times to retry if a story fails checks
+MAX_ATTEMPTS = 2  # how many times to retry if a story fails checks
+# Budget switches. The free plan has a daily token limit, so every story should cost as few tokens as possible.
+EDITOR_PASS = False      # a separate rewrite pass; costs about a third of a story's tokens
+DRAFT_THINKING = "low"   # how hard the writer "thinks" before writing (low/medium/high)
+REVIEW_THINKING = "low"  # same for the safety + logic + engagement review
+TOKENS_USED = 0          # running total for this run (printed by run_batch.py)
 
 ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = ROOT / "output"
@@ -258,7 +266,7 @@ Return ONLY a JSON object:
  "cliches": ["phrases, empty if none"]}"""
 
 # A story must reach these engagement scores (from the reviewer) to be published.
-MIN_HOOK_SCORE = 8
+MIN_HOOK_SCORE = 7     # was 8; most good drafts score 7, and every retry doubles a story's cost
 MIN_PACING_SCORE = 7
 MIN_OVERALL_SCORE = 7
 MAX_CLICHES = 2
@@ -323,8 +331,9 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
             {"role": "user", "content": user},
         ],
         "temperature": temperature,
-        "response_format": {"type": "json_object"},
     }
+    if model not in LOOSE_JSON_MODELS:
+        payload["response_format"] = {"type": "json_object"}
     # Each model family takes different "thinking" settings.
     if model.startswith("openai/gpt-oss"):
         payload["reasoning_effort"] = reasoning_effort
@@ -343,7 +352,9 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
         try:
             with urllib.request.urlopen(request, timeout=120) as response:
                 data = json.loads(response.read().decode("utf-8"))
-            result = json.loads(data["choices"][0]["message"]["content"])
+            global TOKENS_USED
+            TOKENS_USED += (data.get("usage") or {}).get("total_tokens", 0)
+            result = extract_json(data["choices"][0]["message"]["content"] or "")
             # Some models wrap the object in a list; unwrap it. Anything else isn't usable.
             if isinstance(result, list) and len(result) == 1:
                 result = result[0]
@@ -379,6 +390,18 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
     raise RuntimeError("Gave up after repeated rate limits.")
 
 
+def extract_json(text):
+    """The JSON object in a reply, even with extra words or ``` fences around it."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        if start < 0:
+            raise
+        return json.JSONDecoder().raw_decode(text[start:])[0]
+
+
 def check_safety(api_key, text, what):
     """Second AI pass: is this text safe for a 13+ audience?"""
     result = call_llm(api_key, SAFETY_SYSTEM, f"Review this {what}:\n\n{text}", temperature=0)
@@ -400,7 +423,7 @@ def review_story(api_key, data):
             f"Explanation: {q.get('explanation', '')}")
     # "medium" thinking: "high" used up the free daily token limit too fast.
     result = call_llm(api_key, STORY_REVIEW_SYSTEM, f"Review this story:\n\n{text}",
-                      temperature=0, reasoning_effort="medium")
+                      temperature=0, reasoning_effort=REVIEW_THINKING)
     safety = {
         "safe": bool(result.get("safe")),
         "categories": result.get("categories") or [],
@@ -532,7 +555,8 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
         # 2. Plan and write a first draft.
         print(f"Writing draft (attempt {attempt}/{MAX_ATTEMPTS})...")
         try:
-            draft = clean_story(call_llm(api_key, STORY_SYSTEM, user_prompt, temperature=0.95, model=model))
+            draft = clean_story(call_llm(api_key, STORY_SYSTEM, user_prompt, temperature=0.95,
+                                         reasoning_effort=DRAFT_THINKING, model=model))
         except DailyLimitReached:
             raise  # no point retrying until the limit resets
         except RuntimeError as error:
@@ -545,26 +569,26 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
             print(f"  Draft didn't pass format checks: {last_problem}")
             continue
 
-        # 3. Editor pass: rewrite for hook, voice, pacing, and payoff.
-        print("Editing...")
-        editor_input = json.dumps({k: draft[k] for k in
-                                   ("plan", "title", "story", "genre", "tone", "reading_level", "question")
-                                   if k in draft}, ensure_ascii=False)
-        try:
-            edited = clean_story(call_llm(api_key, EDITOR_SYSTEM, f"Draft to edit:\n{editor_input}",
-                                          temperature=0.7, reasoning_effort="low", model=model))
-        except DailyLimitReached:
-            raise  # no point retrying until the limit resets
-        except RuntimeError as error:
-            print(f"  Editor failed ({error}); using the draft.")
-            edited = None
-        if edited is None or validate_story(edited):
-            if edited is not None:
+        # 3. Editor pass: rewrite for hook, voice, pacing, and payoff (off by default to save tokens).
+        data = draft
+        if EDITOR_PASS:
+            print("Editing...")
+            editor_input = json.dumps({k: draft[k] for k in
+                                       ("plan", "title", "story", "genre", "tone", "reading_level", "question")
+                                       if k in draft}, ensure_ascii=False)
+            try:
+                edited = clean_story(call_llm(api_key, EDITOR_SYSTEM, f"Draft to edit:\n{editor_input}",
+                                              temperature=0.7, reasoning_effort="low", model=model))
+            except DailyLimitReached:
+                raise  # no point retrying until the limit resets
+            except RuntimeError as error:
+                print(f"  Editor failed ({error}); using the draft.")
+                edited = None
+            if edited is not None and validate_story(edited):
                 print(f"  Edited version broke format ({'; '.join(validate_story(edited))}); using the draft.")
-            data = draft
-        else:
-            data = edited
-            data["plan"] = draft.get("plan")
+            elif edited is not None:
+                data = edited
+                data["plan"] = draft.get("plan")
 
         # 4. Review: safety + logic + engagement scores.
         print("Reviewing safety, logic, and engagement...")

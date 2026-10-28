@@ -24,7 +24,7 @@ import generate_story as g
 # ---------------------------------------------------------------------------
 
 MAX_REQUESTS_PER_RUN = 5  # user requests handled per run
-STORIES_PER_RUN = 6       # regular stories added per run (a run also stops early at the free daily limit)
+STORIES_PER_RUN = 10      # regular stories added per run (a run also stops early at the free daily limit)
 BACKFILL_PER_RUN = 6      # older stories (and readers' posts) without a recording that get narrated each run
 # Kokoro voices the feed rotates through (listen to voice-samples/ to choose).
 # "a,b" blends two voices.
@@ -238,6 +238,7 @@ def generate_regular(api_key):
         if result["status"] == "approved":
             publish(result["record"])
             done += 1
+        print(f"  Tokens used so far this run: {g.TOKENS_USED:,}")
     return done
 
 
@@ -255,7 +256,9 @@ def main():
         backfill_narration()
     except Exception as error:
         print(f"Backfill skipped: {error}")
-    print(f"\nDone. Published {from_requests} requested + {regular} regular stories.")
+    published = from_requests + regular
+    print(f"\nDone. Published {from_requests} requested + {regular} regular stories, using {g.TOKENS_USED:,} AI tokens"
+          + (f" (about {g.TOKENS_USED // published:,} per story)." if published else "."))
     # Fail the GitHub Actions run (so you get an email) if nothing was published for a real
     # reason. Hitting the free daily limit is expected now and then, so that isn't a failure.
     if from_requests + regular == 0 and STORIES_PER_RUN > 0 and not limited:
