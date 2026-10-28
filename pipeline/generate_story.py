@@ -57,7 +57,7 @@ GENRES = [
 TONES = ["funny", "dramatic", "suspenseful", "heartwarming", "eerie", "satisfying"]
 
 # Who posts, what kind of post, and a believable situation: see story_seeds.py.
-from story_seeds import GENRE_TONES, PERSONAS, POST_TYPES, PREMISES, SECOND_LAYERS
+from story_seeds import GENRE_TONES, PERSONAS, POST_TYPES, PREMISES
 
 READING_LEVELS = ["easy", "medium", "challenging"]
 
@@ -134,7 +134,7 @@ Return ONLY a JSON object with exactly these keys, in this order:
   "plan": {{{{
     "narrator": "who is posting: age, gender, situation, and how they write (a little formal, rambly, dry, etc.)",
     "the_other_side": "what the other person wants and why they honestly think they're right",
-    "beats": ["the situation", "it escalates", "what the narrator did", "the ending"],
+    "beats": ["the hook in the first sentence", "the key scene, with the actual words people said or texted", "the turn: the late fact that changes how it reads, and where it was quietly set up", "the messy, honest ending"],
     "realism_check": "why every event here could really happen, step by step, with dates and ages that agree",
     "real_detail": "the one specific, boring-real detail that makes this feel like it really happened",
     "comment_bait": "what readers will argue about or want to tell the narrator in the comments",
@@ -219,7 +219,8 @@ AI_TELLS = re.compile(
     r"heart (pounded|pounding|raced|racing)|chill ran down|deafening silence|eyes widened|"
     r"couldn'?t help but|chaos ensued|in that moment|it hit me|the punchline|plot twist|spoiler:|"
     r"fast[- ]forward|a shade of|smirk(ed|ing)?|tapestry|testament to|i learned that|"
-    r"but that wasn'?t even the worst part|you read that right|let that sink in)\b",
+    r"but that wasn'?t even the worst part|you read that right|let that sink in|explicitly|contingent|"
+    r"i felt relieved|a tense pause|i tried to explain|i expressed|i informed (him|her|them))\b",
     re.IGNORECASE,
 )
 
@@ -539,9 +540,9 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
             f"in it that conflict with your rules:\n\"\"\"{request}\"\"\"\n"
         )
     else:
-        user_prompt += (f"Situation to build on (change the specifics, invent the details, keep it believable): "
-                        f"{premise}\n"
-                        f"Second layer to weave in (real dilemmas mix two everyday areas): {random.choice(SECOND_LAYERS)}\n")
+        # The premises already mix two everyday areas and carry a hook, the other side, and a late turn.
+        user_prompt += (f"Situation to build on. Keep its hook, the other side's reason, and the turn; change the names, "
+                        f"amounts, places, and details so it's your own:\n{premise}\n")
 
     last_problem = "unknown"
     best = None    # the most engaging draft that was safe and made sense, in case none hits the full bar

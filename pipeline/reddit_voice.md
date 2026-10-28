@@ -50,6 +50,20 @@ Everything you write must be original. Never copy or imitate a real post.
   must have their own reasons, and be a little understandable even when they're wrong.
 - Real posts in this style are usually 330 to 480 words. Long enough for details, short enough to finish.
 
+## What made our test drafts boring (fix these every time)
+- **Summaries instead of scenes.** "I tried to explain my schedule was full" is dead. Play the key moment out:
+  what they actually said, what you said back, the text she sent at 11:52. At least three short quotes or texts.
+- **Tidy endings.** Real people almost never apologize on the spot, thank you, or admit they were wrong, and no
+  principal or boss swoops in to fix everything. The ending leaves some mess: someone's still mad, a group
+  chat went quiet, mom "isn't talking about it", the narrator is still kind of unsure.
+- **Stiff words.** Nobody types "explicitly", "contingent", "modest", "regarding", "ambiguous", "eventually",
+  "I felt relieved", "a tense pause", "I tried to explain", "I expressed", "I informed her". Write how a person
+  talks: "so", "like", "anyway", "which, fine", "I was like", "and she goes", "I'm not even kidding".
+- **No turn.** The best posts have one fact that comes out late and changes how everything reads (the receipt,
+  the voicemail, what the cousin let slip). Set it up early without pointing at it, then drop it plainly.
+- **Mild stakes.** Make it matter to THIS person: the exact money and what it was for, the thing it took them
+  months to save for, the one person whose opinion they care about.
+
 ## Never do these (they make a post sound fake or AI-written)
 - No metaphors or "writerly" lines: no "the air was thick", "a wave of", "time stood still",
   "my heart pounded", "a chill ran down my spine", "deafening silence", "eyes widened",
