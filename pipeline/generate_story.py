@@ -28,6 +28,9 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# GitHub Models: free, rate-limited access to stronger writers for any GitHub account. In GitHub Actions the
+# built-in token works (the workflow needs "permissions: models: read"). Model names start with "github:".
+GITHUB_MODELS_URL = "https://models.github.ai/inference/chat/completions"
 WRITER_MODEL = "openai/gpt-oss-120b"  # writes the stories
 REVIEW_MODEL = "openai/gpt-oss-120b"  # safety + logic checks
 # Free models to fall back on, in order. Each one has its own free daily limit, so when one is
@@ -277,8 +280,12 @@ def next_model():
 def call_llm(api_key, system, user, temperature, reasoning_effort="medium", model=None):
     """Send one chat request and return the parsed JSON object the model replies with."""
     model = model or REVIEW_MODEL
+    on_github = model.startswith("github:")
+    url = GITHUB_MODELS_URL if on_github else API_URL
+    if on_github:
+        api_key = os.environ.get("GITHUB_TOKEN") or load_setting("GITHUB_MODELS_TOKEN")
     payload = {
-        "model": model,
+        "model": model.removeprefix("github:"),
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -288,7 +295,11 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
     if model not in LOOSE_JSON_MODELS:
         payload["response_format"] = {"type": "json_object"}
     # Each model family takes different "thinking" settings.
-    if model.startswith("openai/gpt-oss"):
+    if on_github:
+        payload["max_tokens"] = 4000   # the free plan caps each reply at 4,000 tokens
+        if not model.startswith("github:openai/"):
+            payload.pop("response_format", None)   # not every model there supports strict JSON; read it loosely
+    elif model.startswith("openai/gpt-oss"):
         payload["reasoning_effort"] = reasoning_effort
     elif model.startswith("qwen/"):
         payload["reasoning_format"] = "hidden"
@@ -296,7 +307,7 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
     while attempt < 4:
         attempt += 1
         request = urllib.request.Request(
-            API_URL,
+            url,
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {api_key}",

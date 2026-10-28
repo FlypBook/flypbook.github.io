@@ -1,0 +1,40 @@
+# Compares writer models on the same premises (nothing is published).
+# Results are saved to the "writer-trials" branch, in trial-results/.
+name: Writer trial
+
+on:
+  push:
+    paths: ["pipeline/trial_request.txt"]   # edit that file to start a trial
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to save the results branch
+  models: read      # free GitHub Models access with the built-in token
+
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Write trial stories
+        working-directory: pipeline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python writer_trial.py
+
+      - name: Save results to the writer-trials branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan trial-tmp
+          git rm -rq --cached .
+          git add -f trial-results
+          git commit -qm "Writer trial results"
+          git push -f origin HEAD:writer-trials
