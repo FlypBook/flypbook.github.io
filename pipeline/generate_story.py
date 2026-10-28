@@ -544,15 +544,30 @@ def save(record, folder):
 # ---------------------------------------------------------------------------
 
 
-def build_prompt(request=None, genre=None, tone=None, reading_level=None):
+def premise_at(cursor, genre=None):
+    """The premise at this place in a fixed shuffled order, so runs work through every premise before any repeats.
+    With a genre, the first premise of that genre from this place on."""
+    order = PREMISES[:]
+    random.Random(7).shuffle(order)
+    for k in range(len(order)):
+        p = order[(cursor + k) % len(order)]
+        if not genre or p[0] == genre:
+            return p
+    return order[cursor % len(order)]
+
+
+def build_prompt(request=None, genre=None, tone=None, reading_level=None, cursor=None):
     """Pick a believable situation (story_seeds.py), the kind of post, and who's posting.
     Returns (genre, tone, reading_level, user_prompt)."""
     if request:
         genre = genre or random.choice(GENRES)
         premise = None
     else:
-        options = [p for p in PREMISES if p[0] == genre] if genre else PREMISES
-        genre, premise = random.choice(options or PREMISES)
+        if cursor is None:
+            options = [p for p in PREMISES if p[0] == genre] if genre else PREMISES
+            genre, premise = random.choice(options or PREMISES)
+        else:
+            genre, premise = premise_at(cursor, genre)
     tone = tone or random.choice(GENRE_TONES.get(genre, TONES))
     reading_level = reading_level or random.choice(READING_LEVELS)
     post = POST_TYPES[genre]
@@ -573,7 +588,7 @@ def build_prompt(request=None, genre=None, tone=None, reading_level=None):
     return genre, tone, reading_level, user_prompt
 
 
-def generate(api_key, request=None, genre=None, tone=None, reading_level=None, user=None, model=None):
+def generate(api_key, request=None, genre=None, tone=None, reading_level=None, user=None, model=None, cursor=None):
     model = model or WRITER_MODEL
     created_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
@@ -591,7 +606,7 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
             print(f"REQUEST REJECTED: {safety['reason']}\nSaved to {path}")
             return {"status": "rejected", "reason": safety["reason"]}
 
-    genre, tone, reading_level, user_prompt = build_prompt(request, genre, tone, reading_level)
+    genre, tone, reading_level, user_prompt = build_prompt(request, genre, tone, reading_level, cursor)
 
     last_problem = "unknown"
     best = None    # the most engaging draft that was safe and made sense, in case none hits the full bar

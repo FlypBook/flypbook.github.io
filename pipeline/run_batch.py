@@ -232,11 +232,14 @@ def generate_regular(api_key):
     popular = popular_kinds()
     if popular:
         print("Readers' favorites lately: " + ", ".join(f"{p['genre']}/{p['tone']} ({p['score']})" for p in popular[:5]))
+    # Where we are in the premise order: one step per AI story written by this writer (any status), so local
+    # and GitHub runs share one place in the list and no premise repeats until all have been used.
+    cursor = len(supabase("GET", "stories", "select=id&source=eq.ai&created_at=gte.2026-10-28T12:00:00Z") or [])
     for i in range(STORIES_PER_RUN):
         print(f"\n--- Regular story {i + 1}/{STORIES_PER_RUN}")
         genre, tone = pick_kind(popular)
         try:
-            result = with_fallback(g.generate, api_key, genre=genre, tone=tone)
+            result = with_fallback(g.generate, api_key, genre=genre, tone=tone, cursor=cursor + i)
         except g.DailyLimitReached:
             raise
         except Exception as error:
