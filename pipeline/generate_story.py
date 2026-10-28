@@ -28,9 +28,10 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
-# GitHub Models: free, rate-limited access to stronger writers for any GitHub account. In GitHub Actions the
-# built-in token works (the workflow needs "permissions: models: read"). Model names start with "github:".
-GITHUB_MODELS_URL = "https://models.github.ai/inference/chat/completions"
+# Google's Gemini API (free key from aistudio.google.com, no card) writes far more natural fiction than the free
+# Groq models. Model names start with "gemini:". Without a GEMINI_API_KEY the writer stays on Groq.
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+GEMINI_WRITER = "gemini:gemini-flash-latest"
 WRITER_MODEL = "openai/gpt-oss-120b"  # writes the stories
 REVIEW_MODEL = "openai/gpt-oss-120b"  # safety + logic checks
 # Free models to fall back on, in order. Each one has its own free daily limit, so when one is
@@ -255,6 +256,19 @@ def load_api_key():
     return load_setting("GROQ_API_KEY")
 
 
+def has_setting(name):
+    env_file = ROOT / ".env"
+    return bool(os.environ.get(name)) or (env_file.exists() and any(
+        line.strip().startswith(f"{name}=") and line.split("=", 1)[1].strip().strip("\"'")
+        for line in env_file.read_text(encoding="utf-8").splitlines()))
+
+
+# With a Gemini key, Gemini writes and Groq reviews (and takes over writing if Gemini's free day runs out).
+if has_setting("GEMINI_API_KEY"):
+    WRITER_MODEL = GEMINI_WRITER
+    MODEL_CHAIN = [GEMINI_WRITER, "openai/gpt-oss-120b"]
+
+
 MAX_RATE_WAIT = 120  # seconds; anything longer means the free daily limit is used up
 # The daily limit is a rolling 24 hours, so tokens free up a few at a time. Until this time
 # (a time.time() value, set by run_batch.py), wait for them instead of throwing away a half-done story.
@@ -280,12 +294,12 @@ def next_model():
 def call_llm(api_key, system, user, temperature, reasoning_effort="medium", model=None):
     """Send one chat request and return the parsed JSON object the model replies with."""
     model = model or REVIEW_MODEL
-    on_github = model.startswith("github:")
-    url = GITHUB_MODELS_URL if on_github else API_URL
-    if on_github:
-        api_key = os.environ.get("GITHUB_TOKEN") or load_setting("GITHUB_MODELS_TOKEN")
+    on_gemini = model.startswith("gemini:")
+    url = GEMINI_URL if on_gemini else API_URL
+    if on_gemini:
+        api_key = load_setting("GEMINI_API_KEY")
     payload = {
-        "model": model.removeprefix("github:"),
+        "model": model.removeprefix("gemini:"),
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -295,10 +309,8 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
     if model not in LOOSE_JSON_MODELS:
         payload["response_format"] = {"type": "json_object"}
     # Each model family takes different "thinking" settings.
-    if on_github:
-        payload["max_tokens"] = 4000   # the free plan caps each reply at 4,000 tokens
-        if not model.startswith("github:openai/"):
-            payload.pop("response_format", None)   # not every model there supports strict JSON; read it loosely
+    if on_gemini:
+        payload["reasoning_effort"] = "low"   # a little planning keeps the plot straight without eating the free quota
     elif model.startswith("openai/gpt-oss"):
         payload["reasoning_effort"] = reasoning_effort
     elif model.startswith("qwen/"):
@@ -334,6 +346,8 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
                 # treat that like a used-up limit so the batch moves on to the next model.
                 if "Request too large" in detail:
                     raise DailyLimitReached(f"{model} can't fit a whole story on the free plan") from None
+                if "PerDay" in detail or "per day" in detail.lower():
+                    raise DailyLimitReached(f"{model}'s free daily limit is used up") from None
             if error.code == 429 and attempt < 4:
                 wait = int(error.headers.get("retry-after", "10") or 10)
                 if wait > MAX_RATE_WAIT and time.time() + wait < PATIENT_UNTIL:

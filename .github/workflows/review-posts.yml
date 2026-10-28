@@ -34,6 +34,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # optional: Gemini writes when it's set
         run: |
           n=$(python -c "from run_batch import supabase; print(len(supabase('GET','story_submissions','select=id&status=in.(pending,processing)&limit=50') or []))")
           echo "waiting=$n" >> "$GITHUB_OUTPUT"
@@ -52,6 +53,7 @@ jobs:
         working-directory: pipeline
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # optional: Gemini writes when it's set
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: python review_posts.py
