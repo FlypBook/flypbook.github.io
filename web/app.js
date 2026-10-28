@@ -239,7 +239,12 @@ function renderSettings(page = settingsPage) {
       for (const [value, text] of options) {
         const b = el("button", null, text);
         b.setAttribute("aria-pressed", String(state.settings[key] === value));
-        b.addEventListener("click", () => changeSetting(key, value));
+        const lock = window.Rewards?.lockFor(key, value);
+        if (lock) {
+          b.classList.add("locked");
+          b.innerHTML = `<svg viewBox="0 0 24 24" class="ln"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>${b.textContent}`;
+          b.addEventListener("click", () => toast(`Reach level ${lock.level} to unlock ${text}. Tap the ring to see your progress.`));
+        } else b.addEventListener("click", () => changeSetting(key, value));
         seg.append(b);
       }
       row.append(seg);
@@ -826,7 +831,7 @@ async function toggleLike(story) {
   if (!user()) return needAccount("Create a free account to like stories and build your For You feed.");
   const id = story.data.id, on = !state.liked.has(id);
   on ? state.liked.add(id) : state.liked.delete(id);
-  if (on) learnFrom(story, 1, 1.5);
+  if (on) { learnFrom(story, 1, 1.5); window.Rewards?.award("like", story.data); }
   story.data.like_count = Math.max(0, (story.data.like_count || 0) + (on ? 1 : -1));
   refreshRail(story);
   if (on) story.els.likeBtn.animate([{ transform: "scale(1)" }, { transform: "scale(1.35)" }, { transform: "scale(1)" }], { duration: 320 });
@@ -970,6 +975,10 @@ function commentRow(c) {
   const mid = el("div");
   const name = el("button", "nm", `${c.display_name ? c.display_name + " " : ""}@${c.username} · ${timeAgo(c.created_at)}`);
   name.addEventListener("click", () => openUser(c.username));
+  if (c.points != null && window.Rewards) {
+    const lv = window.Rewards.levelOf(c.points);
+    name.append(el("span", `lv${lv.level >= 11 ? " gold" : ""}`, lv.title));
+  }
   mid.append(name, el("div", "tx", c.body));
   const act = el("button", "act", user()?.id === c.user_id ? "Delete" : "Report");
   act.addEventListener("click", () => commentAction(c, row, act.textContent));
@@ -1005,6 +1014,7 @@ commentForm.addEventListener("submit", async e => {
   commentList.prepend(commentRow({ ...data, username: me.username || "you", display_name: me.display_name,
     avatar_url: me.avatar_hidden ? null : me.avatar_url, profile_color: me.profile_color }));
   learnFrom(commentStory, 1, 1.5);
+  window.Rewards?.award("comment", commentStory.data);
   commentStory.data.comment_count = (commentStory.data.comment_count || 0) + 1;
   refreshRail(commentStory);
   document.getElementById("comments-title").textContent = commentTitle(commentStory.data.comment_count);
@@ -1134,6 +1144,7 @@ function endStory(story) {
   story.card.classList.add("ended");
   story.card.classList.remove("paused");
   logEvent(story, "finish", 1);
+  window.Rewards?.award("finish", story.data);
   rememberFinished(story.data.id);
   renderEndcard(story);
 }
@@ -1175,9 +1186,9 @@ async function answer(story, choice) {
     return toast("Couldn't check that answer. Try again.");
   }
   state.answered.set(story.data.id, res);
-  showAnswer(story, res, choice);
+  showAnswer(story, res, choice, window.Rewards?.answered(story.data.id, res));
 }
-function showAnswer(story, res, choice) {
+function showAnswer(story, res, choice, reward) {
   const box = story.els.endcard;
   box.classList.add("answered");
   box.querySelectorAll(".q-choice").forEach((b, i) => {
@@ -1189,10 +1200,13 @@ function showAnswer(story, res, choice) {
   r.replaceChildren();
   r.append(el("strong", null, res.correct ? "Sharp reading. That's right." : "Not quite."));
   if (res.explanation) r.append(el("p", null, res.explanation));
-  if (user() && !res.already && res.gained) r.append(el("p", "q-points", `+${res.gained} points · ${res.streak}-day streak`));
-  else if (!user() && choice != null) {
-    const join = el("button", "btn-link", "Sign up to earn points and streaks");
-    join.addEventListener("click", () => needAccount("Create a free account to earn points and keep a reading streak."));
+  if (reward?.gained) {
+    const combo = reward.combo >= 3 ? ` · ${reward.combo} in a row, double XP` : reward.combo === 2 ? " · one more right for double XP" : "";
+    r.append(el("p", "q-points", `+${reward.gained} XP${combo}`));
+  } else if (choice != null && !res.correct && window.Rewards) r.append(el("p", "q-points miss", "Combo reset. The next one counts."));
+  if (!user() && choice != null) {
+    const join = el("button", "btn-link", "Sign up to keep your XP and streak");
+    join.addEventListener("click", () => needAccount("Create a free account to keep your XP, level and streak on every device."));
     r.append(join);
   }
 }
@@ -1326,10 +1340,12 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
 // Hooks for account.js
 window.App = {
   toast, openStory, avatar, openUser, resetTaste, GENRES,
+  closeSheets: () => closeSheets(),
   pause: () => pauseReading(),
   refreshFeed: () => resetFeed().catch(showError),
   learnSent: id => window.dispatchEvent(new CustomEvent("flyp:sent", { detail: id })),
   onAuth(_acct, opts = {}) {
+    if ((user()?.id || null) !== state.rewardsFor) { state.rewardsFor = user()?.id || null; window.Rewards?.load(acct()); }
     const p = acct().profile;
     if (p && state.syncedFor !== p.id) {
       state.syncedFor = p.id;
@@ -1356,11 +1372,14 @@ window.App = {
 // ---------- Start: play immediately ----------
 window.accountReady = new Promise(r => { window.resolveAccount = r; });
 async function init() {
+  window.Rewards?.ui.mount();
   applySettings();
   showInstall();
   const wait = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
   const [, , , soundOk] = await Promise.all([loadVideos(), wait(window.gamesReady, 4000), wait(window.accountReady, 3000), canPlaySound()]);
   state.awaitingStart = !soundOk;
+  // Progress (XP, goal ring, streak) once we know who's signed in
+  if (state.rewardsFor === undefined) { state.rewardsFor = user()?.id || null; window.Rewards?.load(acct()).then(() => renderSettings()); }
   try {
     await resetFeed();
     state.booted = true;

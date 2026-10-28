@@ -83,3 +83,9 @@ Requirements that every phase must follow. The full original phase plan lives in
 ## Leaner story writer + info at the bottom (2026-10-27)
 - No title card before a story anymore; the title, genre band, length and writer sit bottom-left above the reading bar, and the words start right away.
 - To fit more stories into the free daily token limits: one draft + one review per attempt (the separate editor pass is off, `EDITOR_PASS`), light "thinking" (`DRAFT_THINKING`/`REVIEW_THINKING` = low), 2 attempts max, hook bar 7 instead of 8. The fallback model is gpt-oss-20b, whose replies are read with `extract_json()` instead of Groq's strict JSON mode (that mode kept failing). qwen3.8-27b was dropped: its free plan can't fit one story. Each run prints tokens used per story.
+
+## Rewards: carrot and stick, phase 1 (2026-10-27)
+- `web/rewards.js` + `supabase/006_rewards.sql`. XP lives in `profiles.points` and is only granted by the database (`award_xp`, `submit_answer`), once per story per kind, with likes/comments capped at 60 XP a day. Guests get the same rules saved on the phone.
+- Carrots: finish +20, right answer +15 (x2 on a 3-in-a-row combo), daily goal +30, like +2, comment +5. Levels 1-11 with a new title each (First Page ... Shakespeare); level-up card; unlockable highlight colors, favorite narrators, and profile-picture frames (ink at 5, gold at 8). Level titles show in comments and on profiles.
+- Sticks: the goal ring (top right) only fills with finished stories; the streak counts days the daily goal is met and ends at the reader's midnight; after 8 PM the flame flickers with a one-time warning; a wrong answer resets the combo. XP is never taken away. Every 7-day streak earns a freeze (max 2) that covers one missed day.
+- Not done on purpose: loot boxes / random prizes, guilt-trip notifications, rewards beyond the daily goal for endless scrolling. Phase 2: friend leagues, badges, genre collections.

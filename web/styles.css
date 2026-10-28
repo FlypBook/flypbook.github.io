@@ -522,3 +522,70 @@ svg.ln path[d*="h.01"] { stroke-width: 2.8; }
 #settings-about .fine { margin-top: 14px; }
 #reset-taste { margin-top: 20px; }
 :root[data-theme="dark"] .list-item em[data-s="pending"], :root[data-theme="dark"] .list-item em[data-s="processing"] { color: #e0a526; }
+
+/* ---------- Rewards: goal ring, XP pop-ups, level up, progress page ---------- */
+.top-actions { display: flex; align-items: center; gap: 2px; }
+.goal-ring { position: relative; width: 42px; height: 42px; display: grid; place-items: center; color: var(--text); }
+.goal-ring .ring { position: absolute; inset: 1px; width: 40px; height: 40px; transform: rotate(-90deg); }
+.goal-ring circle { fill: none; stroke-width: 3.2; }
+.goal-ring .track { stroke: rgba(255, 253, 248, 0.22); }
+.goal-ring .fill { stroke: var(--butter); stroke-linecap: round; transition: stroke-dasharray 0.6s var(--ease), stroke 0.3s; }
+.goal-ring .flame { position: relative; display: grid; place-items: center; line-height: 1; }
+.goal-ring .flame svg { width: 15px; height: 15px; fill: var(--tomato); margin-bottom: -1px; }
+.goal-ring .flame b { font-size: 0.66rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.goal-ring.cold .flame svg { fill: rgba(255, 253, 248, 0.45); }
+.goal-ring.done .fill { stroke: var(--tomato); }
+.goal-ring.risk .fill { stroke: var(--tomato); }
+.goal-ring.risk .flame svg { animation: flicker 1.1s ease-in-out infinite; }
+@keyframes flicker { 0%, 100% { opacity: 1; transform: scale(1); } 40% { opacity: 0.45; transform: scale(0.9) rotate(-6deg); } 70% { opacity: 0.85; } }
+.goal-ring.pulse { animation: ring-pop 0.7s var(--ease); }
+@keyframes ring-pop { 0% { transform: scale(1); } 35% { transform: scale(1.28); } 100% { transform: scale(1); } }
+.xp-float { position: absolute; z-index: 25; right: 54px; top: calc(var(--safe-t) + 46px); padding: 4px 10px; border-radius: 999px; background: var(--butter);
+  color: #18151b; font-weight: 800; font-size: 0.85rem; pointer-events: none; animation: xp-up 1.4s var(--ease) forwards; }
+@keyframes xp-up { 0% { opacity: 0; transform: translateY(26px) scale(0.8); } 18% { opacity: 1; transform: translateY(0) scale(1.05); }
+  70% { opacity: 1; transform: translateY(-6px) scale(1); } 100% { opacity: 0; transform: translateY(-16px); } }
+.levelup { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(17, 16, 19, 0.6); animation: fade-in 0.25s ease; }
+@keyframes fade-in { from { opacity: 0; } }
+.levelup-card { width: min(84%, 320px); padding: 26px 22px 20px; border-radius: 18px; background: var(--paper); color: var(--ink); text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); animation: card-in 0.5s var(--ease); }
+@keyframes card-in { from { opacity: 0; transform: translateY(20px) scale(0.92); } }
+.levelup-num { width: 78px; height: 78px; margin: 0 auto 12px; display: grid; place-items: center; border-radius: 50%; background: var(--grape); color: #fff;
+  font-family: var(--serif); font-size: 2.4rem; box-shadow: 0 0 0 5px var(--paper), 0 0 0 7.5px var(--butter); animation: badge-spin 0.9s var(--ease); }
+@keyframes badge-spin { from { transform: rotateY(-180deg) scale(0.6); } }
+.levelup small { display: block; font-weight: 700; color: var(--paper-muted); }
+.levelup strong { display: block; margin-top: 2px; font-family: var(--serif); font-weight: 400; font-size: 1.8rem; }
+.levelup p { margin: 10px 0 0; color: var(--paper-muted); line-height: 1.4; }
+.levelup .btn-primary { margin-top: 18px; }
+.q-points.miss { color: var(--paper-muted) !important; font-weight: 600; }
+
+.pg-level { display: flex; align-items: center; gap: 16px; margin: 6px 0 14px; }
+.pg-level > div:last-child { flex: 1; min-width: 0; }
+.pg-badge { width: 62px; height: 62px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--grape); color: #fff;
+  font-family: var(--serif); font-size: 1.9rem; box-shadow: 0 0 0 3px var(--paper), 0 0 0 5px var(--butter); }
+.pg-level strong { display: block; font-family: var(--serif); font-weight: 400; font-size: 1.45rem; }
+.pg-level span { display: block; margin-top: 2px; font-size: 0.84rem; font-weight: 600; color: var(--paper-muted); }
+.pg-bar { height: 8px; margin-top: 8px; border-radius: 8px; background: var(--paper-deep); overflow: hidden; }
+.pg-bar i { display: block; height: 100%; border-radius: 8px; background: var(--grape); transition: width 0.6s var(--ease); }
+.pg-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pg-card { padding: 12px 10px; border-radius: 14px; background: var(--paper-deep); }
+.pg-card b { display: block; font-family: var(--serif); font-weight: 400; font-size: 1.6rem; line-height: 1.1; }
+.pg-card b small { font-size: 0.95rem; color: var(--paper-muted); }
+.pg-card span { font-size: 0.76rem; font-weight: 600; color: var(--paper-muted); }
+.pg-card.hot b { color: var(--tomato); }
+.pg-earn, .pg-unlocks { border-radius: 14px; background: var(--paper-deep); padding: 2px 14px; }
+.pg-earn div, .pg-unlocks div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; font-size: 0.92rem; }
+.pg-earn div + div, .pg-unlocks div + div { border-top: 1px solid var(--paper-rule); }
+.pg-earn b { font-weight: 800; color: var(--brand-text); font-variant-numeric: tabular-nums; }
+.pg-unlocks div { justify-content: flex-start; color: var(--paper-muted); }
+.pg-unlocks em { flex: none; width: 42px; font-style: normal; font-weight: 800; font-size: 0.78rem; }
+.pg-unlocks div.got { color: var(--ink); }
+.pg-unlocks div.got em { color: var(--moss); }
+.pg-unlocks div:not(.got) span::after { content: " (locked)"; }
+
+.seg button.locked { display: flex; align-items: center; justify-content: center; gap: 3px; color: color-mix(in srgb, var(--paper-muted) 70%, transparent); }
+.seg button.locked svg { width: 13px; height: 13px; stroke-width: 2.2; flex: none; }
+.cmt .nm .lv { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--paper-deep); color: var(--brand-text); font-size: 0.68rem; font-weight: 750; }
+.cmt .nm .lv.gold, .pf-level.gold { color: #b8860b; }
+.pf-level { font-style: normal; font-size: 0.82rem; font-weight: 700; color: var(--brand-text); }
+.av.frame-ink { box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px var(--ink) !important; }
+.av.frame-gold { box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px #d4a017, 0 0 0 8px #f5d35c !important; }

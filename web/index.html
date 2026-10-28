@@ -57,9 +57,12 @@
   <div id="app">
     <header id="topbar">
       <span class="logo" aria-label="FlypBook"><svg class="logo-mark"><use href="#fb-mark"/></svg><span>Flyp<b>Book</b></span></span>
-      <button id="settings-btn" class="plain-btn" aria-label="Settings">
-        <svg viewBox="0 0 24 24" class="ln"><path d="M4 7.5h9M17 7.5h3M4 16.5h3M11 16.5h9"/><circle cx="15" cy="7.5" r="2"/><circle cx="9" cy="16.5" r="2"/></svg>
-      </button>
+      <div class="top-actions">
+        <!-- rewards.js puts the daily goal ring here -->
+        <button id="settings-btn" class="plain-btn" aria-label="Settings">
+          <svg viewBox="0 0 24 24" class="ln"><path d="M4 7.5h9M17 7.5h3M4 16.5h3M11 16.5h9"/><circle cx="15" cy="7.5" r="2"/><circle cx="9" cy="16.5" r="2"/></svg>
+        </button>
+      </div>
       <nav class="feed-tabs" aria-label="Feeds">
         <button data-feed="foryou" aria-current="true">For you</button>
         <button data-feed="latest">Fresh</button>
@@ -143,6 +146,7 @@
   <script type="module" src="game3d_more.js?v=BUILD"></script>
   <script src="narrator.js?v=BUILD"></script>
   <script src="taste.js?v=BUILD"></script>
+  <script src="rewards.js?v=BUILD"></script>
   <script src="app.js?v=BUILD"></script>
   <script type="module" src="account.js?v=BUILD"></script>
   <script type="module" src="social.js?v=BUILD"></script>

@@ -86,7 +86,16 @@ function profileHeader(p, card) {
   const names = $(`<div class="pf-names"><strong></strong><span></span></div>`);
   names.querySelector("strong").textContent = p.display_name || "@" + p.username;
   names.querySelector("span").textContent = ["@" + p.username, p.pronouns].filter(Boolean).join(" · ");
-  head.append(avatar(p, "av av-xl"), names);
+  // Level and title from XP, plus the profile-picture frame unlocked at levels 5 and 8
+  const xp = card?.points ?? p.points;
+  const pic = avatar(p, "av av-xl");
+  if (xp != null && window.Rewards) {
+    const lv = window.Rewards.levelOf(xp);
+    names.append($(`<em class="pf-level${lv.level >= 11 ? " gold" : ""}">Level ${lv.level} · ${lv.title}</em>`));
+    const frame = window.Rewards.frameFor(xp);
+    if (frame) pic.classList.add("frame-" + frame);
+  }
+  head.append(pic, names);
   const wrap = $(`<div class="pf"></div>`);
   wrap.append(head);
   if (p.bio) wrap.append($(`<p class="pf-bio">${esc(p.bio)}</p>`));
@@ -125,7 +134,7 @@ acct.views.profile = async function viewProfile({ tab = "posts" } = {}) {
   if (stale("profile")) return;
   body.replaceChildren(profileHeader(p, card || { id: p.id, username: p.username }));
   body.append($(`<div class="stats">
-      <div><b>${p.points}</b><span>points</span></div>
+      <div><b>${p.points}</b><span>XP</span></div>
       <div><b>${p.current_streak}</b><span>day streak</span></div>
       <div><b>${p.longest_streak}</b><span>best streak</span></div>
       <div><b>${LEVEL(p.reading_level)}</b><span>reading level</span></div>
@@ -368,7 +377,7 @@ acct.views.user = async function viewUser({ username }) {
   body.append($(`<p class="fine">${card.i_follow && card.follows_me ? "You're friends: you can send each other stories."
     : card.follows_me ? "They follow you. Add them back to be friends." : "Follow each other to become friends."}</p>`));
   body.append($(`<div class="stats">
-      <div><b>${card.points}</b><span>points</span></div>
+      <div><b>${card.points}</b><span>XP</span></div>
       <div><b>${card.current_streak}</b><span>day streak</span></div>
       <div><b>${card.longest_streak}</b><span>best streak</span></div>
       <div><b>${new Date(card.joined).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</b><span>joined</span></div>
