@@ -142,6 +142,102 @@ def convert_all():
     print(f"{len(listed)} videos ready ({total_mb:.0f} MB) in {VIDEO_DIR}")
 
 
+# ---------------------------------------------------------------------------
+# "auto": realistic, longer clips in three moods, downloaded through Pixabay's API
+# (its video URLs are meant to be downloaded and hosted yourself, never hotlinked).
+# ---------------------------------------------------------------------------
+
+AUTO_SECONDS = 45            # keep up to this much of each clip (the app plays clips back to back)
+AUTO_MIN_SECONDS = 20
+CATEGORIES = {
+    # First-person action footage: the real-life version of a gameplay background.
+    "action": ["dashcam", "car driving road", "driving forest road", "driving tunnel", "city driving", "cycling",
+               "bicycle riding", "gopro", "first person", "hyperlapse walking", "train ride", "skating", "skiing",
+               "snowboarding", "motocross", "mountain bike pov", "skateboard", "motorcycle pov", "roller coaster pov"],
+    # Hands making or cleaning something, start to finish.
+    "satisfying": ["acrylic pour", "pouring paint", "soap cutting", "kinetic sand", "cake decorating", "frosting",
+                   "ice cream", "honey", "cutting fruit", "wood carving", "spray paint", "pressure washing", "car wash",
+                   "lathe", "3d printer", "pottery wheel", "glass blowing", "latte art", "kneading dough", "slime"],
+    # Slow, beautiful real places.
+    "calm": ["ocean waves", "rain window", "forest stream", "aerial mountains", "waterfall", "clouds timelapse",
+             "snow falling", "aquarium fish", "campfire", "city lights night"],
+}
+PER_QUERY_AUTO = 3
+# Computer-made clips look fake next to real footage; skip them (and anything already rejected by eye).
+BAD_TAGS = ["animation", "abstract", "3d", "render", "particle", "digital", "fractal", "graphic", "cgi", "futuristic",
+            "neon", "text", "greeting", "birthday", "portrait", "model", "fashion", "loop", "background", "ai generated"]
+REJECTED_FILE = ROOT / "pipeline" / "output" / "video-check" / "rejected.txt"
+REJECTED = {int(x[2:]) for x in REJECTED_FILE.read_text().split()} if REJECTED_FILE.exists() else set()
+CONTACT_DIR = ROOT / "pipeline" / "output" / "video-check"   # 4 frames per clip, for a quick look before shipping
+
+
+def contact_sheet(mp4, dest):
+    """Four frames from across the clip side by side, to check it at a glance."""
+    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(mp4), "-vf",
+                    "fps=4/45,scale=180:320,tile=4x1", "-frames:v", "1", "-q:v", "5", str(dest)], check=True)
+
+
+def auto():
+    key = g.load_setting("PIXABAY_API_KEY")
+    only = set(sys.argv[2].split(",")) if len(sys.argv) > 2 else None
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    CONTACT_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = ROOT / "incoming-videos"
+    tmp.mkdir(exist_ok=True)
+    listed = {v["id"]: v for v in json.loads(LIST.read_text(encoding="utf-8"))} if LIST.exists() else {}
+    for cat, queries in CATEGORIES.items():
+        if only and cat not in only:
+            continue
+        for query in queries:
+            try:
+                hits = api(key, q=query, per_page=50, order="popular")
+            except Exception as error:
+                print(f"  {query}: search failed ({error})")
+                continue
+            taken = 0
+            for hit in hits:
+                vid = f"px{hit['id']}"
+                files = hit["videos"]
+                src = files.get("large") or {}
+                if not src.get("url") or src.get("width", 0) < 1920:
+                    src = files.get("medium") or {}
+                # Popular results drift off topic, so the clip's own tags must mention the search's main word.
+                tags = hit.get("tags", "").lower()
+                fake = any(w in tags for w in BAD_TAGS) or hit["id"] in REJECTED
+                on_topic = any(w in tags for w in query.replace(" pov", "").split() if len(w) > 2)
+                if (vid in listed or hit["duration"] < AUTO_MIN_SECONDS or not src.get("url")
+                        or src.get("height", 0) < 720 or not on_topic or fake):
+                    continue
+                raw = tmp / f"{hit['id']}.mp4"
+                try:
+                    if not raw.exists():
+                        req = urllib.request.Request(src["url"], headers={"User-Agent": "Mozilla/5.0 FlypBook"})
+                        raw.write_bytes(urllib.request.urlopen(req, timeout=120).read())
+                    out = VIDEO_DIR / f"{vid}.mp4"
+                    vf = f"crop='min(iw,ih*9/16)':'min(ih,iw*16/9)',scale={OUT_W}:{OUT_H},fps=30"
+                    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(raw), "-t", str(AUTO_SECONDS),
+                                    "-vf", vf, "-an", "-c:v", "libx264", "-preset", "slow", "-crf", str(QUALITY),
+                                    "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)], check=True)
+                    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-ss", "1", "-i", str(out),
+                                    "-frames:v", "1", "-q:v", "6", str(VIDEO_DIR / f"{vid}.jpg")], check=True)
+                    contact_sheet(out, CONTACT_DIR / f"{cat}-{vid}.jpg")
+                except Exception as error:
+                    print(f"  {query} {vid}: failed ({error})")
+                    continue
+                listed[vid] = {"id": vid, "url": f"videos/{vid}.mp4", "poster": f"videos/{vid}.jpg",
+                               "by": hit.get("user", "Pixabay creator"), "link": hit["pageURL"], "source": "Pixabay",
+                               "tags": hit.get("tags", ""), "cat": cat,
+                               "seconds": min(hit["duration"], AUTO_SECONDS)}
+                LIST.write_text(json.dumps(list(listed.values()), indent=1), encoding="utf-8")
+                taken += 1
+                print(f"  {cat} / {query}: {vid} ({hit['duration']}s, {out.stat().st_size // 1024} KB)", flush=True)
+                if taken >= PER_QUERY_AUTO:
+                    break
+            time.sleep(0.5)
+    total_mb = sum(p.stat().st_size for p in VIDEO_DIR.glob("*.mp4")) / 1e6
+    print(f"{len(listed)} videos ({total_mb:.0f} MB). Check the frames in {CONTACT_DIR}")
+
+
 if __name__ == "__main__":
-    {"picklist": make_picklist, "convert": convert_all}.get(
+    {"picklist": make_picklist, "convert": convert_all, "auto": auto}.get(
         sys.argv[1] if len(sys.argv) > 1 else "", lambda: print(__doc__))()

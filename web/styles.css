@@ -589,3 +589,6 @@ svg.ln path[d*="h.01"] { stroke-width: 2.8; }
 .pf-level { font-style: normal; font-size: 0.82rem; font-weight: 700; color: var(--brand-text); }
 .av.frame-ink { box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px var(--ink) !important; }
 .av.frame-gold { box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px #d4a017, 0 0 0 8px #f5d35c !important; }
+/* Real-footage backgrounds: two stacked clips, cross-fading from one to the next. */
+.media video.clip { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s ease; }
+.media video.clip.on { opacity: 1; }

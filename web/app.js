@@ -6,9 +6,11 @@
 
 const CONFIG = window.FLYPBOOK_CONFIG;
 const PAGE_SIZE = 10;
-// Share of stories that get a real video clip (the rest get a code-drawn scene), per background setting.
-const VIDEO_SHARE = { mix: 0.3, games: 0, real: 1, calm: 0.5 };
-// Calm / satisfying scenes (Settings > Background > Calm). Everything else counts as gameplay.
+// Backgrounds are real footage in three moods (web/videos.json "cat"). Each story plays a run of different
+// clips from one mood. Code-drawn scenes are only a fallback when clips can't load.
+const CLIP_CATS = ["action", "satisfying", "calm"];
+const CLIP_SCENE = { action: "ActionClips", satisfying: "SatisfyingClips", calm: "CalmClips" };  // taste features
+// Calm / satisfying code-drawn scenes, used by the fallback. Everything else counts as gameplay.
 const CALM_SCENES = new Set(["OrbsScene", "WavesScene", "PendulumScene", "MarbleRun", "HydraulicPress", "SoapCut",
   "BallPour", "PotteryWheel", "LaserEngrave", "Stack3D", "Domino3D", "JellyHop", "SandSliceScene"]);
 // For You: every Nth story is a "something different" pick, per Settings > Feed > Discovery.
@@ -114,9 +116,9 @@ const SETTINGS_UI = [
     ["hlcolor", "Highlight color", [["varied", "Mix"], ["#f5d35c", "Butter"], ["#bba6f2", "Lilac"], ["#ff8a65", "Coral"], ["#9fe3b8", "Mint"]]],
   ] },
   { id: "background", title: "Background", color: "#23858f",
-    summary: () => state.settings.bg === "off" ? "Off" : `${{ mix: "A mix", games: "Gameplay", real: "Real clips", calm: "Calm scenes" }[state.settings.bgtype]}${state.settings.bg === "dim" ? ", dimmed" : ""}`, items: [
+    summary: () => state.settings.bg === "off" ? "Off" : `${{ mix: "A mix", action: "First-person action", satisfying: "Satisfying", calm: "Calm places" }[state.settings.bgtype] || "A mix"}${state.settings.bg === "dim" ? ", dimmed" : ""}`, items: [
     ["bg", "Background", [["on", "On"], ["dim", "Dim"], ["off", "Off"]]],
-    ["bgtype", "What plays", [["mix", "Mix"], ["games", "Gameplay"], ["real", "Real clips"], ["calm", "Calm"]]],
+    ["bgtype", "What plays", [["mix", "Mix"], ["action", "Action POV"], ["satisfying", "Satisfying"], ["calm", "Calm"]]],
   ] },
   { id: "feed", title: "Feed", color: "#e0a526",
     summary: () => [state.settings.autoplay === "off" ? "Waits for a tap" : "Autoplay on", { any: "Any length", short: "Quick reads", long: "Longer reads" }[state.settings.length],
@@ -146,8 +148,13 @@ const SETTINGS_UI = [
 const FEED_SETTINGS = new Set(["length", "readers", "hide", "voice", "explore"]);
 
 function loadSettings() {
-  try { return { ...SETTING_DEFAULTS, ...JSON.parse(localStorage.getItem("flypbook-settings") || "{}") }; }
+  try { return migrateSettings({ ...SETTING_DEFAULTS, ...JSON.parse(localStorage.getItem("flypbook-settings") || "{}") }); }
   catch { return { ...SETTING_DEFAULTS }; }
+}
+/** Old background choices (code-drawn "gameplay", "real clips") map onto the real-footage moods. */
+function migrateSettings(s) {
+  s.bgtype = { games: "action", real: "satisfying" }[s.bgtype] || s.bgtype;
+  return s;
 }
 let settingsSyncTimer;
 function saveSettings() {
@@ -531,7 +538,7 @@ async function buildForYou() {
 
 /** Turn how a reader reacted to a story into a lesson for the taste model. */
 function learnFrom(story, label, weight = 1) {
-  const bg = story.media?.kind === "video" ? "RealClip" : story.media?.renderer?.scene?.constructor?.name;
+  const bg = story.media?.kind === "video" ? CLIP_SCENE[story.media.cat] : story.media?.renderer?.scene?.constructor?.name;
   window.taste.learn(TasteModel.features(story.data, bg), label, weight);
 }
 function learnFromLeaving(story) {
@@ -1076,29 +1083,84 @@ document.querySelectorAll("#bottomnav button").forEach(b => b.addEventListener("
 }));
 
 // ---------- Background media (lives inside each card) ----------
-function pickVideo(story) {
-  const share = VIDEO_SHARE[state.settings.bgtype] ?? 0.3;
-  if (story.noVideo || !state.videos.length || (story.seed % 100) / 100 >= share) return null;
-  return state.videos[Math.floor(story.seed / 100) % state.videos.length];
+/** Which mood of real clips this story gets (taste-weighted in Mix), and its own shuffled run of them. */
+function pickClips(story) {
+  if (story.noVideo || !state.videos.length) return null;
+  const type = { games: "action", real: "satisfying" }[state.settings.bgtype] || state.settings.bgtype;
+  const rand = seeded(story.seed);
+  let cat = type;
+  if (!CLIP_CATS.includes(cat)) {
+    const w = CLIP_CATS.map(c => window.taste.sceneWeight(CLIP_SCENE[c]) * (c === "calm" ? 0.6 : 1));
+    let r = rand() * w.reduce((a, b) => a + b, 0);
+    cat = CLIP_CATS[w.findIndex(x => (r -= x) < 0)] || CLIP_CATS[0];
+  }
+  const pool = state.videos.filter(v => (v.cat || "satisfying") === cat);
+  if (!pool.length) return null;
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return { cat, pool };
+}
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+/** Plays a story's clips back to back (never looping one short clip), cross-fading into the next. */
+class ClipPlayer {
+  constructor(box, credit, clips, onFail) {
+    Object.assign(this, { box, credit, clips, onFail, i: 0, live: false });
+    this.els = [0, 1].map(() => {
+      const v = document.createElement("video");
+      v.muted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.setAttribute("muted", "");
+      v.className = "clip";
+      v.addEventListener("ended", () => this.next());
+      v.addEventListener("error", () => { if (v === this.cur) this.fails++ > 2 ? this.onFail() : this.next(); });
+      box.append(v);
+      return v;
+    });
+    this.fails = 0;
+    this.cur = this.els[0];
+    this.load(this.cur, 0, "metadata");
+    this.cur.classList.add("on");
+    this.showCredit();
+  }
+  clip(i) { return this.clips.pool[i % this.clips.pool.length]; }
+  load(v, i, preload) {
+    const c = this.clip(i);
+    v.preload = preload;
+    if (c.poster) v.poster = c.poster;
+    v.src = c.url;
+  }
+  /** Get the following clip ready in the hidden element so the switch is seamless. */
+  prepNext() {
+    const other = this.els.find(v => v !== this.cur);
+    if (other.dataset.i !== String(this.i + 1)) { other.dataset.i = this.i + 1; this.load(other, this.i + 1, "auto"); }
+  }
+  next() {
+    this.i++;
+    const prev = this.cur;
+    this.prepNext();
+    this.cur = this.els.find(v => v !== prev);
+    this.cur.classList.add("on");
+    prev.classList.remove("on");
+    if (this.live) this.cur.play().catch(() => {});
+    setTimeout(() => { if (prev !== this.cur) { prev.pause(); prev.dataset.i = ""; } }, 700);
+    this.showCredit();
+  }
+  showCredit() {
+    const c = this.clip(this.i), a = el("a", null, `Video: ${c.by} / ${c.source || "Pixabay"}`);
+    a.href = c.link; a.target = "_blank"; a.rel = "noopener";
+    a.addEventListener("click", e => e.stopPropagation());
+    this.credit.replaceChildren(a);
+  }
+  start() { this.live = true; this.cur.play().catch(() => {}); this.prepNext(); }
+  stop() { this.live = false; this.els.forEach(v => v.pause()); }
+  dispose() { this.stop(); this.els.forEach(v => { v.removeAttribute("src"); v.load(); }); }
 }
 function ensureMedia(story) {
   if (story.media) return;
-  const video = pickVideo(story);
-  if (video) {
-    const v = document.createElement("video");
-    v.muted = true; v.loop = true; v.playsInline = true;
-    v.setAttribute("playsinline", ""); v.setAttribute("muted", "");
-    v.preload = "metadata";
-    if (video.poster) v.poster = video.poster;
-    v.src = video.url;
-    v.addEventListener("error", () => { releaseMedia(story); story.noVideo = true; ensureMedia(story); updateMedia(); }, { once: true });
-    story.els.media.append(v);
-    story.media = { kind: "video", el: v };
-    story.els.credit.innerHTML = "";
-    const a = el("a", null, `Video: ${video.by} / ${video.source || "Pixabay"}`);
-    a.href = video.link; a.target = "_blank"; a.rel = "noopener";
-    a.addEventListener("click", e => e.stopPropagation());
-    story.els.credit.append(a);
+  const clips = pickClips(story);
+  if (clips) {
+    const fail = () => { releaseMedia(story); story.noVideo = true; ensureMedia(story); updateMedia(); };
+    story.media = { kind: "video", cat: clips.cat, player: new ClipPlayer(story.els.media, story.els.credit, clips, fail) };
   } else {
     const c = document.createElement("canvas");
     story.els.media.append(c);
@@ -1107,7 +1169,7 @@ function ensureMedia(story) {
 }
 function releaseMedia(story) {
   if (!story.media) return;
-  if (story.media.kind === "video") { story.media.el.removeAttribute("src"); story.media.el.load(); }
+  if (story.media.kind === "video") story.media.player.dispose();
   else story.media.renderer.dispose();
   story.els.media.replaceChildren();
   story.els.credit.replaceChildren();
@@ -1121,8 +1183,8 @@ function updateMedia() {
     if (!near || !on) { releaseMedia(story); return; }
     ensureMedia(story);
     const m = story.media, live = i === state.active && state.playing && !document.hidden;
-    if (m.kind === "video") live ? m.el.play().catch(() => {}) : m.el.pause();
-    else live ? m.renderer.start() : m.renderer.stop();
+    const r = m.kind === "video" ? m.player : m.renderer;
+    live ? r.start() : r.stop();
   });
 }
 
@@ -1372,7 +1434,7 @@ window.App = {
       state.syncedFor = p.id;
       // Settings saved on the account win, so they follow the reader to every device.
       if (p.settings && Object.keys(p.settings).length) {
-        state.settings = { ...SETTING_DEFAULTS, ...state.settings, ...p.settings };
+        state.settings = migrateSettings({ ...SETTING_DEFAULTS, ...state.settings, ...p.settings });
         try { localStorage.setItem("flypbook-settings", JSON.stringify(state.settings)); } catch {}
         applySettings();
       } else saveSettings();
