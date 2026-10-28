@@ -10,6 +10,7 @@ import sys
 
 from run_batch import supabase
 
+sys.stdout.reconfigure(encoding="utf-8")  # titles can have curly quotes the Windows console can't print
 cutoff = sys.argv[1]
 rows = supabase("GET", "stories", f"select=id,title,created_at,source&status=eq.published&created_at=lt.{cutoff}&source=eq.ai") or []
 print(f"{len(rows)} AI stories written before {cutoff}:")

@@ -14,6 +14,10 @@ Everything you write must be original. Never copy or imitate a real post.
   name can come with "let's call her Dana".
 - Concrete, boring-real details make it believable: "$22.99 a month", "15 hours a week",
   "around 11:40", "the Thursday before spring break", "the group chat with my cousins".
+  Two to four of these in the whole post, where they matter. Never a timeline of full dates and times
+  ("Nov 23, 2026 at 5 pm"): people say "at Thanksgiving" or "the week before prom".
+- Made-up places sound generic: "my school", "the pizza place by my house". Never a famous fictional name
+  from TV or books.
 - People talk like people. Short quotes. Texts can be quoted. Nobody gives speeches.
 - The narrator is honest about themselves: "I know that sounds petty", "maybe I overreacted",
   "I'm still kind of annoyed writing this". They are relatable, not a hero.

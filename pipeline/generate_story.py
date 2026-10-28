@@ -57,7 +57,7 @@ GENRES = [
 TONES = ["funny", "dramatic", "suspenseful", "heartwarming", "eerie", "satisfying"]
 
 # Who posts, what kind of post, and a believable situation: see story_seeds.py.
-from story_seeds import GENRE_TONES, PERSONAS, POST_TYPES, PREMISES
+from story_seeds import GENRE_TONES, POST_TYPES, PREMISES
 
 READING_LEVELS = ["easy", "medium", "challenging"]
 
@@ -126,19 +126,17 @@ reader would never guess it wasn't typed by a real person, and so gripping they 
 
 {STORY_RULES}
 
-Plan BEFORE writing: fill in "plan" first, then write the post so it follows the plan exactly.
-The plan and the post go in ONE JSON object: a reply with only the plan is useless.
+Think through the plot privately first: who the narrator is (an age that fits the situation), why the other
+person honestly thinks they're right, the key scene, and the turn. Check that every age, date, and who-did-what
+agrees (a sophomore isn't graduating; a venue emails whoever booked it). Then write only the finished post.
+The "plan" below is a few words each, not sentences from the post.
 
 Return ONLY a JSON object with exactly these keys, in this order:
 {{{{
   "plan": {{{{
-    "narrator": "who is posting: age, gender, situation, and how they write (a little formal, rambly, dry, etc.)",
-    "the_other_side": "what the other person wants and why they honestly think they're right",
-    "beats": ["the hook in the first sentence", "the key scene, with the actual words people said or texted", "the turn: the late fact that changes how it reads, and where it was quietly set up", "the messy, honest ending"],
-    "realism_check": "why every event here could really happen, step by step, with dates and ages that agree",
-    "real_detail": "the one specific, boring-real detail that makes this feel like it really happened",
-    "comment_bait": "what readers will argue about or want to tell the narrator in the comments",
-    "answer_proof": "the quiz answer and the exact detail in the post that proves it"
+    "narrator": "age, gender, one line about them",
+    "turn": "the late fact, and where it's quietly set up earlier",
+    "answer_proof": "the quiz answer and the detail in the post that proves it"
   }}}},
   "title": "the post title, following the title rule for this post type",
   "story": "the full post body",
@@ -531,7 +529,7 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
     post = POST_TYPES[genre]
 
     user_prompt = (f"Post type (genre): {genre}\nTone: {tone}\nReading level: {reading_level}\n"
-                   f"Who's posting: {random.choice(PERSONAS)}. Invent everything else about them so it fits the situation.\n"
+                   "Who's posting: pick an age (15-23) and situation that fit the story naturally.\n"
                    f"Title rule: the title {post['title']}\n"
                    f"Ending rule: {post['ending']}\n")
     if request:
