@@ -160,7 +160,8 @@ def with_fallback(fn, *args, **kwargs):
             return fn(*args, **kwargs)
         except g.DailyLimitReached as error:
             print(f"  {error}.")
-            if not g.next_model():
+            # Only a used-up WRITER moves on to the next model; if the reviewer is out, wait for the next run.
+            if g.WRITER_MODEL not in str(error) or not g.next_model():
                 raise
 
 

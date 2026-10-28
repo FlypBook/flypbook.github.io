@@ -286,11 +286,11 @@ class DailyLimitReached(RuntimeError):
 def next_model():
     """Switch writing and reviewing to the next free model in MODEL_CHAIN.
     Returns False when every model has used up its free daily limit."""
-    global WRITER_MODEL, REVIEW_MODEL
+    global WRITER_MODEL
     i = MODEL_CHAIN.index(WRITER_MODEL) + 1 if WRITER_MODEL in MODEL_CHAIN else len(MODEL_CHAIN)
     if i >= len(MODEL_CHAIN):
         return False
-    WRITER_MODEL = REVIEW_MODEL = MODEL_CHAIN[i]
+    WRITER_MODEL = MODEL_CHAIN[i]   # the reviewer stays on Groq
     print(f"Switching to the next free model: {WRITER_MODEL}")
     return True
 
@@ -350,7 +350,7 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
                 # treat that like a used-up limit so the batch moves on to the next model.
                 if "Request too large" in detail:
                     raise DailyLimitReached(f"{model} can't fit a whole story on the free plan") from None
-                if "PerDay" in detail or "per day" in detail.lower():
+                if on_gemini and ("PerDay" in detail or "per day" in detail.lower()):
                     raise DailyLimitReached(f"{model}'s free daily limit is used up") from None
             if error.code == 429 and attempt < 4:
                 wait = int(error.headers.get("retry-after", "10") or 10)
@@ -361,7 +361,7 @@ def call_llm(api_key, system, user, temperature, reasoning_effort="medium", mode
                     continue
                 if wait > MAX_RATE_WAIT:
                     # A long wait means the free daily limit is used up; don't sit there for an hour.
-                    raise DailyLimitReached(f"Groq daily limit reached (asked to wait {wait}s)") from None
+                    raise DailyLimitReached(f"{model}: Groq daily limit reached (asked to wait {wait}s)") from None
                 print(f"  Rate limited, waiting {wait}s...")
                 time.sleep(wait)
                 continue
