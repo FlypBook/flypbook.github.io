@@ -74,7 +74,7 @@ MAX_ATTEMPTS = 3  # how many times to retry if a story fails checks
 # Budget switches. The free plan has a daily token limit, so every story should cost as few tokens as possible.
 EDITOR_PASS = False      # a separate rewrite pass; costs about a third of a story's tokens
 DRAFT_THINKING = "medium"  # how hard the writer "thinks" before writing (low/medium/high); medium keeps the logic tight
-REVIEW_THINKING = "low"  # same for the safety + logic + engagement review
+REVIEW_THINKING = "medium"  # same for the review; "low" scored good and bad posts alike
 TOKENS_USED = 0          # running total for this run (printed by run_batch.py)
 
 ROOT = Path(__file__).resolve().parent
@@ -188,7 +188,8 @@ before deciding. Set logic_ok to false if you find even one real error.
 Only flag real errors a reader would notice, not style preferences.
 
 Then judge it like a longtime reader of Reddit story communities AND an impatient 17-year-old with a thumb
-ready to swipe. Score 1-10 each, harshly (5 = meh, 7 = good, 9 = would send it to a friend):
+ready to swipe. Score 1-10 each (5 = meh, 7 = good, 9 = would send it to a friend). For calibration, the two
+example posts at the end of this message score 8-9 on everything: score against that bar, not against perfection.
 - authenticity: would regulars believe a real person typed this? Deduct for anything writerly, too neat,
   too dramatic, sitcom-like, or AI-sounding (metaphors, "a wave of", em dashes, perfect speeches, a moral).
 - hook: does the title plus the first paragraph make you need to know what happens?
@@ -198,21 +199,24 @@ ready to swipe. Score 1-10 each, harshly (5 = meh, 7 = good, 9 = would send it t
 - payoff: does the ending land (a real dilemma, a satisfying consequence, or a real surprise)?
 - overall: would you read every word and then want to comment?
 Then name the exact sentence where you'd be most tempted to swipe away (or "none"),
-and list every phrase that sounds AI-written or writerly.
+and list the phrases a reader would actually notice as AI-written or writerly (not ordinary casual wording).
 
 Return ONLY a JSON object:
 {"safe": true or false, "categories": ["safety problems, empty if safe"], "reason": "one short sentence",
  "logic_ok": true or false, "logic_problems": ["each logic error in one short sentence, empty if none"],
  "scores": {"authenticity": 0, "hook": 0, "stakes": 0, "voice": 0, "pacing": 0, "payoff": 0, "overall": 0},
  "swipe_point": "the sentence, or none",
- "cliches": ["AI-sounding or writerly phrases, empty if none"]}"""
+ "cliches": ["AI-sounding or writerly phrases, empty if none"]}
+
+Calibration examples (they score 8-9):
+""" + REDDIT_VOICE.split("## Two example posts", 1)[1]
 
 # A post must reach these scores (from the reviewer) to be published.
 MIN_AUTHENTICITY_SCORE = 8
 MIN_HOOK_SCORE = 7
 MIN_PACING_SCORE = 7
 MIN_OVERALL_SCORE = 7
-MAX_CLICHES = 1
+MAX_CLICHES = 2
 FALLBACK_MIN_OVERALL = 7   # if no draft clears the bar, publish the best safe one scoring at least this
 
 # Phrases that instantly make a post sound AI-written. Checked locally (free) before the review.
@@ -449,6 +453,13 @@ def review_story(api_key, data):
     return safety, logic, engagement
 
 
+# Real brands the writer sometimes slips in, and the plain words that replace them.
+BRANDS = {"iPads": "tablets", "iPad": "tablet", "iPhones": "phones", "iPhone": "phone", "MacBook": "laptop", "AirPods": "earbuds", "Netflix": "the streaming app",
+          "Venmo": "the payment app", "Cash ?App": "the payment app", "Instagram": "social media", "TikTok": "social media",
+          "Snapchat": "social media", "Uber": "a rideshare", "Starbucks": "the coffee shop", "McDonald's": "the burger place",
+          "Walmart": "the store", "PlayStation": "console", "Xbox": "console", "Nintendo Switch": "console"}
+
+
 def clean_story(data):
     """Fix formatting the model sometimes adds: a literal "\\n" for paragraph breaks, or markdown
     like *italics*, which narration would read out loud."""
@@ -458,6 +469,8 @@ def clean_story(data):
         text = re.sub(r"\bAITA\b", "am I the jerk", text)
         text = re.sub(r"\bWIBTA\b", "would I be the jerk", text)
         text = re.sub(r",\s*([.!?])", r"\1", text)
+        for brand, plain in BRANDS.items():                              # no real brands in the stories
+            text = re.sub(rf"\b{brand}\b", plain, text)
         data["story"] = text
     if isinstance(data, dict) and isinstance(data.get("title"), str):
         data["title"] = re.sub(r"\s*[\u2014\u2013]\s*", ", ", data["title"]).strip().strip('"')
