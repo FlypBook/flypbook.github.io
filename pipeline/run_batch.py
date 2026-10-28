@@ -12,8 +12,10 @@ Needs GROQ_API_KEY, SUPABASE_URL and SUPABASE_SECRET_KEY (in .env locally, GitHu
 
 import datetime
 import json
+import os
 import random
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -25,6 +27,8 @@ import generate_story as g
 
 MAX_REQUESTS_PER_RUN = 5  # user requests handled per run
 STORIES_PER_RUN = 10      # regular stories added per run (a run also stops early at the free daily limit)
+# Minutes a run may spend waiting for Groq's rolling daily limit to free up tokens (GitHub stops a run at 150).
+PATIENT_MINUTES = float(os.environ.get("PATIENT_MINUTES", "100"))
 BACKFILL_PER_RUN = 6      # older stories (and readers' posts) without a recording that get narrated each run
 # Kokoro voices the feed rotates through (listen to voice-samples/ to choose).
 # "a,b" blends two voices.
@@ -78,9 +82,11 @@ def notify(user_id, type_, message, story_id=None):
 def publish(record, requested_by=None):
     """Save an approved story (and its hidden quiz answer) to Supabase. Returns the new story id."""
     q = record["question"]
+    # The narration starts with the title, like a Reddit story video reads the post title first.
+    body = f"{record['title']}\n\n{record['story']}"
     story = supabase("POST", "stories", body={
         "title": record["title"],
-        "body": record["story"],
+        "body": body,
         "genre": record["tags"]["genre"],
         "tone": record["tags"]["tone"],
         "length": record["tags"]["length"],
@@ -96,7 +102,7 @@ def publish(record, requested_by=None):
     supabase("POST", "story_answers", body={
         "story_id": story["id"], "answer_index": q["answer_index"], "explanation": q["explanation"],
     })
-    add_narration(story["id"], record["story"])
+    add_narration(story["id"], body)
     return story["id"]
 
 
@@ -244,6 +250,7 @@ def generate_regular(api_key):
 
 def main():
     api_key = g.load_api_key()
+    g.PATIENT_UNTIL = time.time() + PATIENT_MINUTES * 60
     from_requests = regular = 0
     limited = False
     try:

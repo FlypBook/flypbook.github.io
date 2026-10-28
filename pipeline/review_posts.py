@@ -76,7 +76,8 @@ def review(api_key, post):
 
 
 def publish_post(post, verdict):
-    body = g.clean_story({"story": post["body"]})["story"]
+    # Narration reads the title first, then the post (same as the AI stories).
+    body = post["title"].strip() + "\n\n" + g.clean_story({"story": post["body"]})["story"]
     words = len(body.split())
     q = verdict["question"]
     story = supabase("POST", "stories", body={
@@ -100,7 +101,7 @@ def publish_post(post, verdict):
         supabase("POST", "story_answers", body={
             "story_id": story["id"], "answer_index": q["answer_index"], "explanation": q.get("explanation", ""),
         })
-    return story["id"]
+    return story["id"], body
 
 
 def tell_followers(post, story_id):
@@ -142,8 +143,8 @@ def main():
                 verdict = {"approved": None, "reason": str(error)}
                 break
         if verdict["approved"]:
-            story_id = publish_post(post, verdict)
-            add_narration(story_id, post["body"])   # the feed only shows stories with an AI recording
+            story_id, spoken = publish_post(post, verdict)
+            add_narration(story_id, spoken)   # the feed only shows stories with an AI recording
             supabase("PATCH", "story_submissions", f"id=eq.{post['id']}",
                      {"status": "approved", "story_id": story_id, "processed_at": now(), "reason": verdict["notes"][:500] or None})
             notify(post["user_id"], "post_approved", f"Your story \"{post['title']}\" is live! {verdict['reason']}"[:300], story_id)

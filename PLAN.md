@@ -89,3 +89,12 @@ Requirements that every phase must follow. The full original phase plan lives in
 - Carrots: finish +20, right answer +15 (x2 on a 3-in-a-row combo), daily goal +30, like +2, comment +5. Levels 1-11 with a new title each (First Page ... Shakespeare); level-up card; unlockable highlight colors and profile-picture frames (ink at 5, gold at 8). Narrator voices are never locked; "Mix" (the default) orders the feed so no two stories in a row share a voice. Level titles show in comments and on profiles.
 - Sticks: the goal ring (top right) only fills with finished stories; the streak counts days the daily goal is met and ends at the reader's midnight; after 8 PM the flame flickers with a one-time warning; a wrong answer resets the combo. XP is never taken away. Every 7-day streak earns a freeze (max 2) that covers one missed day.
 - Not done on purpose: loot boxes / random prizes, guilt-trip notifications, rewards beyond the daily goal for endless scrolling. Phase 2: friend leagues, badges, genre collections.
+
+## Stories that read like real Reddit posts (2026-10-28)
+- Why: our own data showed 25 of 26 reads were skipped, almost all in the first sentence or two. Research notes and sources: `pipeline/STORY_RESEARCH.md`.
+- `pipeline/reddit_voice.md` is the voice guide both the writer and editor follow (the "I (17F)" voice, boring-real details, a villain with reasons, a never-do list of AI tells, two original example posts). `pipeline/craft_guide.md` (TikTok-script rules) is no longer used.
+- `pipeline/story_seeds.py`: 68 believable premises across 13 post types, each type with its own title and ending rule; simple narrator personas; a "second layer" (money, a group chat, a sentimental item...) because real dilemmas mix two everyday areas.
+- The title is read aloud first, then the body's first sentence must already contain the conflict. 330-480 words. Em dashes are replaced, acronyms are spelled out in the body for narration.
+- Review adds an authenticity score (needs 8/10), and a free local regex catches AI phrases before a review is spent. Near-miss drafts are revised with the reviewer's notes instead of thrown away.
+- Only gpt-oss-120b writes (gpt-oss-20b and qwen3.8-27b wrote broken plots; qwen is also capped at 1,000 output tokens a minute). Groq's free daily limit is a rolling 24 hours, so runs now wait for tokens to free up (`PATIENT_MINUTES`, default 100) instead of discarding half-done stories.
+- Stories from the old writer were hidden (not deleted) with `pipeline/retire_old_stories.py`.
