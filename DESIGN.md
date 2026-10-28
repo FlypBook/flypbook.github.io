@@ -41,3 +41,14 @@ Genre inks (the band on each cover) live in `web/app.js` (`GENRE_INK`).
 questions). Archivo for everything else: 600-800 for UI, condensed (wdth 75) black for punchy labels.
 **Radius scale:** 6 (chips, fields), 12 (buttons, cards), 18 (sheet top), round (avatars, the Write button).
 **Motion:** quick and physical: 180-320ms, ease-out `cubic-bezier(.2,.9,.25,1)`. The intro cover turns like a page.
+
+## Light and dark (Settings > Appearance: Auto / Light / Dark)
+Stories always play on night (they sit on video). The theme changes the *pages* (sheets), the dock and the
+launch screen: light = cream paper and ink, dark = #1C1A20 paper and cream ink. All of it runs on the tokens in
+`:root` / `:root[data-theme="dark"]` in `web/styles.css`; never hard-code a light-only color in a sheet.
+Things that are printed objects (the story cover, the genre bands, butter labels) use the fixed `--cover-*`
+colors so they look the same in both themes. A tiny script in `index.html` sets the theme before first paint.
+
+## Launch screen
+A small grape-bound book riffles three pages (the "flyp"), the wordmark is revealed left to right, then the
+tagline and status fade up. Leaving, the book zooms toward you and the screen fades into the feed.

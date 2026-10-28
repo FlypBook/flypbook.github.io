@@ -31,6 +31,7 @@ const ICON = {
 
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const SETTING_DEFAULTS = {
+  theme: "auto",
   narration: "on", rate: "1", voice: "any",
   capsize: "m", capstyle: "varied", hlcolor: "varied", contrast: "normal",
   bg: reduceMotion ? "dim" : "on", bgtype: "mix", motion: reduceMotion ? "reduce" : "auto",
@@ -79,41 +80,68 @@ const acct = () => window.Account || {};
 const user = () => acct().user || null;
 
 // ---------- Settings (saved on this device, and synced to the account when signed in) ----------
-// Each setting: [key, label, [[value, button text], ...]]. Rendered into the Settings sheet.
+// Settings are grouped into categories. The sheet first lists the categories (with a short summary of
+// what's chosen); tapping one opens its page. Each setting: [key, label, [[value, button text], ...], hint].
+const ICONS = {
+  appearance: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17z" fill="currentColor"/><circle cx="12" cy="12" r="8.5"/>',
+  listening: '<path d="M4.5 14.5v-2.5a7.5 7.5 0 0 1 15 0v2.5"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.6"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.6"/>',
+  captions: '<path d="M4 18 8.5 6h1L14 18M5.6 14h6.8"/><path d="M15.5 10.5c.6-.7 1.5-1 2.4-1 1.7 0 2.6 1 2.6 2.6V18M20.5 14.2c-3.6 0-5.2.8-5.2 2.2 0 1 .8 1.7 2 1.7 1.8 0 3.2-1.3 3.2-3.1"/>',
+  background: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="m3.8 16 4.7-4.6 3.6 3.4 2.6-2.4 5.5 5"/><circle cx="15.5" cy="9.3" r="1.4"/>',
+  feed: '<rect x="5" y="3.5" width="14" height="10" rx="2"/><path d="M6.5 17h11M8.5 20.5h7"/>',
+  wellbeing: '<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.6 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/>',
+  notifications: '<path d="M6.2 9.3a5.8 5.8 0 0 1 11.6 0c0 5.6 2.2 7.2 2.2 7.2H4s2.2-1.6 2.2-7.2zM10.2 19.6a2 2 0 0 0 3.6 0"/>',
+  account: '<circle cx="12" cy="8.3" r="3.8"/><path d="M4.8 20c1.2-3.5 3.8-5.4 7.2-5.4s6 1.9 7.2 5.4"/>',
+  about: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8h.01"/>',
+};
 const SETTINGS_UI = [
-  ["Listening", [
+  { id: "appearance", title: "Appearance", color: "#5b2fb3",
+    summary: () => `${{ auto: "Auto", light: "Light", dark: "Dark" }[state.settings.theme]} theme${state.settings.contrast === "high" ? " · High contrast" : ""}${state.settings.motion === "reduce" ? " · Less motion" : ""}`, items: [
+    ["theme", "Theme", [["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]], "Auto follows your phone's light or dark mode."],
+    ["contrast", "Contrast", [["normal", "Normal"], ["high", "High"]]],
+    ["motion", "Motion", [["auto", "Full"], ["reduce", "Reduced"]]],
+  ] },
+  { id: "listening", title: "Listening", color: "#f0532e",
+    summary: () => state.settings.narration === "off" ? "Reading silently" : `Voice on · ${state.settings.rate}× speed`, items: [
     ["narration", "Narration", [["on", "Voice on"], ["off", "Read silently"]]],
     ["rate", "Speed", [["0.8", "0.8×"], ["1", "1×"], ["1.2", "1.2×"], ["1.5", "1.5×"]]],
     ["voice", "Favorite narrator", [["any", "Any"], ["af_heart", "Heart"], ["af_heart,af_sky", "Sky"], ["am_liam", "Liam"], ["phone", "Phone"]],
       "Stories read by your favorite show up more. Phone uses your phone's own voice for every story."],
-  ]],
-  ["Captions", [
+  ] },
+  { id: "captions", title: "Captions", color: "#2c5aa0",
+    summary: () => `Size ${state.settings.capsize.toUpperCase()} · ${state.settings.capstyle === "classic" ? "Always classic" : "New look each story"}`, items: [
     ["capsize", "Text size", [["s", "S"], ["m", "M"], ["l", "L"], ["xl", "XL"]]],
     ["capstyle", "Look", [["varied", "New look each story"], ["classic", "Always classic"]]],
     ["hlcolor", "Highlight color", [["varied", "Mix"], ["#f5d35c", "Butter"], ["#bba6f2", "Lilac"], ["#ff8a65", "Coral"], ["#9fe3b8", "Mint"]]],
-    ["contrast", "Contrast", [["normal", "Normal"], ["high", "High"]]],
-  ]],
-  ["Background", [
+  ] },
+  { id: "background", title: "Background", color: "#23858f",
+    summary: () => state.settings.bg === "off" ? "Off" : `${{ mix: "A mix", games: "Gameplay", real: "Real clips", calm: "Calm scenes" }[state.settings.bgtype]}${state.settings.bg === "dim" ? ", dimmed" : ""}`, items: [
     ["bg", "Background", [["on", "On"], ["dim", "Dim"], ["off", "Off"]]],
     ["bgtype", "What plays", [["mix", "Mix"], ["games", "Gameplay"], ["real", "Real clips"], ["calm", "Calm"]]],
-    ["motion", "Motion", [["auto", "Full"], ["reduce", "Reduced"]]],
-  ]],
-  ["Feed", [
+  ] },
+  { id: "feed", title: "Feed", color: "#e0a526",
+    summary: () => [state.settings.autoplay === "off" ? "Waits for a tap" : "Autoplay on", { any: "Any length", short: "Quick reads", long: "Longer reads" }[state.settings.length],
+      state.settings.hide.length ? `${state.settings.hide.length} hidden` : ""].filter(Boolean).join(" · "), items: [
     ["autoplay", "Next story", [["on", "Plays by itself"], ["off", "Waits for a tap"]]],
     ["length", "Story length", [["any", "Any"], ["short", "Quick"], ["long", "Longer"]]],
     ["readers", "Stories by readers", [["on", "Show"], ["off", "Hide"]]],
     ["explore", "Discovery", [["less", "Less"], ["normal", "Normal"], ["more", "More"]],
       "How often For You mixes in something different from your usual."],
     ["hide", "Hide these kinds", "genres"],
-  ]],
-  ["Wellbeing", [
-    ["breaks", "Break reminder", [["off", "Off"], ["15", "15 min"], ["25", "25 min"], ["45", "45 min"]]],
-  ]],
-  ["Notifications", [
+  ] },
+  { id: "wellbeing", title: "Wellbeing", color: "#2f7a4b",
+    summary: () => state.settings.breaks === "off" ? "No break reminders" : `Break reminder every ${state.settings.breaks} min`, items: [
+    ["breaks", "Break reminder", [["off", "Off"], ["15", "15 min"], ["25", "25 min"], ["45", "45 min"]],
+      "A gentle card suggests a break after this much reading in a row."],
+  ] },
+  { id: "notifications", title: "Notifications", color: "#d93f6a", account: true,
+    summary: () => { const on = ["notify_follows", "notify_sends", "notify_posts"].filter(k => state.settings[k] !== false).length; return on === 3 ? "All on" : on ? `${on} of 3 on` : "All off"; }, items: [
     ["notify_follows", "New followers", [[true, "On"], [false, "Off"]]],
     ["notify_sends", "Stories friends send", [[true, "On"], [false, "Off"]]],
     ["notify_posts", "New posts from people I follow", [[true, "On"], [false, "Off"]]],
-  ], "account"],
+  ] },
+  { id: "account", title: "Account and privacy", color: "#18151b", account: true, action: () => acct().open?.("editProfile"),
+    summary: () => acct().profile ? `@${acct().profile.username}` : "" },
+  { id: "about", title: "About FlypBook", pageTitle: "About", color: "#6b6259", summary: () => "Install, privacy, credits" },
 ];
 const FEED_SETTINGS = new Set(["length", "readers", "hide", "voice", "explore"]);
 
@@ -131,6 +159,7 @@ function saveSettings() {
 function applySettings() {
   const s = state.settings;
   Object.assign(app.dataset, { bg: s.bg, capsize: s.capsize, contrast: s.contrast, motion: s.motion });
+  applyTheme();
   window.FlypScenes = {
     allow: name => s.bgtype === "calm" ? CALM_SCENES.has(name) : s.bgtype === "games" ? !CALM_SCENES.has(name) : true,
     weight: name => window.taste.sceneWeight(name),
@@ -140,52 +169,88 @@ function applySettings() {
   updateMedia();
 }
 
-function renderSettings() {
+// Light / Dark / Auto. The page also picks this before it's drawn (see the script in index.html).
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  const t = state.settings.theme === "auto" ? (darkQuery.matches ? "dark" : "light") : state.settings.theme;
+  document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "dark" ? "#111013" : "#fbf8f2");
+}
+darkQuery.addEventListener?.("change", () => { if (state.settings.theme === "auto") applyTheme(); });
+
+let settingsPage = null;   // null = the list of categories
+const svg = paths => `<svg viewBox="0 0 24 24" class="ln">${paths}</svg>`;
+const optionText = (key, options) => (options.find(o => o[0] === state.settings[key]) || [])[1];
+function summary(cat) {
+  if (cat.summary) return cat.summary();
+  return cat.items.filter(([, , o]) => Array.isArray(o)).slice(0, 3).map(([k, l, o]) => {
+    const t = optionText(k, o);
+    return typeof state.settings[k] === "boolean" ? `${l}: ${t}` : t;
+  }).filter(Boolean).join(" · ");
+}
+function renderSettings(page = settingsPage) {
   const box = document.getElementById("settings-body");
   if (!box) return;
+  settingsPage = page;
+  const cat = SETTINGS_UI.find(c => c.id === page);
+  settingsSheet.dataset.page = cat ? "category" : "list";
+  document.getElementById("settings-title").textContent = cat ? cat.pageTitle || cat.title : "Settings";
+  document.getElementById("settings-back").hidden = !cat;
+  document.getElementById("settings-about").hidden = page !== "about";
   box.replaceChildren();
-  for (const [section, items, only] of SETTINGS_UI) {
-    if (only === "account" && !user()) continue;
-    box.append(el("div", "settings-section", section));
-    for (const [key, label, options, hint] of items) {
-      const row = el("div", "setting");
-      row.append(el("span", null, label));
-      if (options === "genres") {
-        const chips = el("div", "chips");
-        for (const g of GENRES) {
-          const b = el("button", "chip-btn", g);
-          b.setAttribute("aria-pressed", String(state.settings.hide.includes(g)));
-          b.addEventListener("click", () => {
-            const hide = new Set(state.settings.hide);
-            hide.has(g) ? hide.delete(g) : hide.add(g);
-            changeSetting("hide", [...hide]);
-          });
-          chips.append(b);
-        }
-        row.append(chips);
-      } else {
-        const seg = el("div", "seg");
-        for (const [value, text] of options) {
-          const b = el("button", null, text);
-          b.setAttribute("aria-pressed", String(state.settings[key] === value));
-          b.addEventListener("click", () => changeSetting(key, value));
-          seg.append(b);
-        }
-        row.append(seg);
+  if (!cat) {
+    const list = el("div", "cat-list");
+    const groups = [["appearance", "listening", "captions", "background"], ["feed", "wellbeing", "notifications"], ["account", "about"]];
+    for (const ids of groups) {
+      const group = el("div", "cat-group");
+      for (const c of ids.map(id => SETTINGS_UI.find(x => x.id === id))) {
+        if (c.account && !user()) continue;
+        const row = el("button", "cat-row");
+        row.innerHTML = `<span class="cat-ico" style="--ci:${c.color}">${svg(ICONS[c.id])}</span><span><strong></strong><small></small></span>${svg('<path d="m9.5 5.5 6.5 6.5-6.5 6.5"/>').replace('class="ln"', 'class="ln chev"')}`;
+        row.querySelector("strong").textContent = c.title;
+        row.querySelector("small").textContent = summary(c);
+        row.addEventListener("click", () => (c.action ? c.action() : renderSettings(c.id)));
+        group.append(row);
       }
-      if (hint) row.append(el("p", "fine", hint));
-      box.append(row);
+      if (group.children.length) list.append(group);
     }
+    box.append(list);
+    return;
   }
-  if (user()) {
-    const edit = el("button", "btn-secondary", "Edit profile and privacy");
-    edit.addEventListener("click", () => acct().open?.("editProfile"));
-    box.append(edit);
+  const pageBox = el("div", "cat-page");
+  for (const [key, label, options, hint] of cat.items || []) {
+    const row = el("div", "setting");
+    row.append(el("span", null, label));
+    if (options === "genres") {
+      const chips = el("div", "chips");
+      for (const g of GENRES) {
+        const b = el("button", "chip-btn", g);
+        b.setAttribute("aria-pressed", String(state.settings.hide.includes(g)));
+        b.addEventListener("click", () => {
+          const hide = new Set(state.settings.hide);
+          hide.has(g) ? hide.delete(g) : hide.add(g);
+          changeSetting("hide", [...hide]);
+        });
+        chips.append(b);
+      }
+      row.append(chips);
+    } else {
+      const seg = el("div", "seg");
+      for (const [value, text] of options) {
+        const b = el("button", null, text);
+        b.setAttribute("aria-pressed", String(state.settings[key] === value));
+        b.addEventListener("click", () => changeSetting(key, value));
+        seg.append(b);
+      }
+      row.append(seg);
+    }
+    if (hint) row.append(el("p", "fine", hint));
+    pageBox.append(row);
   }
-  const reset = el("button", "btn-link", "Reset my For You recommendations");
-  reset.addEventListener("click", () => resetTaste());
-  box.append(reset);
+  box.append(pageBox);
 }
+document.getElementById("settings-back").addEventListener("click", () => renderSettings(null));
+document.getElementById("reset-taste").addEventListener("click", () => resetTaste());
 function changeSetting(key, value) {
   const old = state.settings[key];
   state.settings[key] = value;
@@ -198,7 +263,7 @@ function changeSetting(key, value) {
     state.feedTimer = setTimeout(() => resetFeed().catch(showError), 900);   // wait for more taps, then rebuild once
   }
 }
-document.getElementById("settings-btn").addEventListener("click", () => { closeSheets(); renderSettings(); settingsSheet.hidden = false; });
+document.getElementById("settings-btn").addEventListener("click", () => { closeSheets(); renderSettings(null); settingsSheet.hidden = false; });
 document.getElementById("settings-close").addEventListener("click", () => { settingsSheet.hidden = true; });
 for (const s of [commentsSheet, discoverSheet]) s.querySelector("[data-close]").addEventListener("click", () => { s.hidden = true; });
 

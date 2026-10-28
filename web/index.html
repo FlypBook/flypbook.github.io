@@ -24,6 +24,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Nunito:wght@900&family=Young+Serif&display=swap">
   <link rel="stylesheet" href="styles.css?v=BUILD">
+  <!-- Pick light or dark before anything is drawn, so the app never flashes the wrong colors -->
+  <script>
+    try {
+      var t = JSON.parse(localStorage.getItem("flypbook-settings") || "{}").theme || "auto";
+      if (t === "auto") t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      document.documentElement.dataset.theme = t;
+    } catch (e) { document.documentElement.dataset.theme = "dark"; }
+  </script>
 </head>
 <body>
   <!-- Reusable logo mark: an open book with a page mid-flip, on a grape tile -->
@@ -93,11 +101,14 @@
     <section id="settings" class="sheet" hidden aria-label="Settings">
       <div class="grabber"></div>
       <div class="sheet-head">
-        <h2>Settings</h2>
+        <button id="settings-back" class="back-btn" hidden aria-label="Back to all settings">
+          <svg viewBox="0 0 24 24" class="ln"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><span>Settings</span></button>
+        <h2 id="settings-title">Settings</h2>
         <button id="settings-close" class="icon-btn" aria-label="Close settings">&times;</button>
       </div>
-      <!-- Filled in by app.js (renderSettings) -->
+      <!-- Filled in by app.js (renderSettings): a list of categories, or one category's options -->
       <div id="settings-body"></div>
+      <div id="settings-about" hidden>
       <div class="setting" id="install-row" hidden>
         <span>Get the app</span>
         <button class="btn-primary" hidden>Install FlypBook</button>
@@ -106,11 +117,20 @@
       <p class="fine">Stories are written by AI or posted by readers, and every one is checked for safety. Background videos from
         <a href="https://pixabay.com" target="_blank" rel="noopener">Pixabay</a>.
         <a href="privacy.html" target="_blank">Privacy policy</a>.</p>
+      <button class="btn-secondary" id="reset-taste">Reset my For You recommendations</button>
+      </div>
     </section>
 
     <div id="splash" role="status">
-      <svg class="splash-mark"><use href="#fb-mark"/></svg>
-      <div class="splash-logo">Flyp<b>Book</b></div>
+      <!-- Launch: a small open book riffles its pages (the "flyp"), then the name is revealed -->
+      <div class="splash-book" aria-hidden="true">
+        <div class="sb-cover"></div>
+        <div class="sb-page sb-left"></div>
+        <div class="sb-page sb-right"></div>
+        <div class="sb-flip"></div><div class="sb-flip"></div><div class="sb-flip"></div>
+        <div class="sb-ribbon"></div>
+      </div>
+      <div class="splash-logo">FlypBook</div>
       <div class="splash-tag">Scroll Like Shakespeare</div>
       <div class="splash-status" id="splash-status">Loading stories…</div>
       <button id="start-btn" class="start-btn" hidden>Tap to start reading</button>
