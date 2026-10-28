@@ -1,1 +1,1 @@
-Trial 1: compare GitHub Models writers on the same two premises.
+Trial 2: same comparison, with a saved log.
