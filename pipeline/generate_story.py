@@ -267,10 +267,12 @@ def has_setting(name):
         for line in env_file.read_text(encoding="utf-8").splitlines()))
 
 
-# With a Gemini key, Gemini writes and Groq reviews (and takes over writing if Gemini's free day runs out).
+# With a Gemini key, Gemini writes and Groq reviews.
 if has_setting("GEMINI_API_KEY"):
+    # Each Gemini model has its own free daily allowance (about 20 requests). The Lite models also wrote well in
+    # testing (2026-10-28), so they take over when Flash runs out. Groq's model never writes: its stories failed review.
     WRITER_MODEL = GEMINI_WRITER
-    MODEL_CHAIN = [GEMINI_WRITER, "openai/gpt-oss-120b"]
+    MODEL_CHAIN = [GEMINI_WRITER, "gemini:gemini-3.5-flash-lite", "gemini:gemini-3.1-flash-lite"]
 
 
 MAX_RATE_WAIT = 120  # seconds; anything longer means the free daily limit is used up
