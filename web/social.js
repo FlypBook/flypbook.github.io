@@ -10,7 +10,7 @@ const toast = t => App().toast?.(t);
 const me = () => acct.user;
 const sheet = body.closest(".sheet");
 const stale = view => sheet.hidden || sheet.dataset.view !== view;   // the reader moved on while we loaded
-const COLORS = ["#8b5cf6", "#ff5a36", "#f59f00", "#2fb344", "#1c7ed6", "#e64980", "#0ca678", "#495057"];
+const COLORS = ["#5b2fb3", "#f0532e", "#e0a526", "#2f7a4b", "#2c5aa0", "#d93f6a", "#23858f", "#18151b"];   // the genre inks
 const POST_DRAFT = "flypbook-post-draft";
 const MIN_WORDS = 120, MAX_WORDS = 2500;
 const ago = t => {
@@ -82,7 +82,7 @@ function listInto(box, rows, empty) {
 // ---------- Profile header (mine and other people's) ----------
 function profileHeader(p, card) {
   const head = $(`<div class="pf-head"></div>`);
-  head.style.setProperty("--pc", p.profile_color || "#8b5cf6");
+  head.style.setProperty("--pc", p.profile_color || "#5b2fb3");
   const names = $(`<div class="pf-names"><strong></strong><span></span></div>`);
   names.querySelector("strong").textContent = p.display_name || "@" + p.username;
   names.querySelector("span").textContent = ["@" + p.username, p.pronouns].filter(Boolean).join(" · ");
@@ -120,7 +120,7 @@ acct.views.profile = async function viewProfile({ tab = "posts" } = {}) {
   await loadProfile();
   const p = acct.profile;
   if (!p) { body.innerHTML = `<p class="fine">Loading your profile...</p>`; return; }
-  title.textContent = "Your profile";
+  title.textContent = "";
   const { data: card } = await sb.rpc("profile_card", { p_username: p.username });
   if (stale("profile")) return;
   body.replaceChildren(profileHeader(p, card || { id: p.id, username: p.username }));
@@ -341,6 +341,7 @@ acct.views.user = async function viewUser({ username }) {
   if (error) { body.innerHTML = missingTables(error) ? notReady : `<p class="fine">${esc(friendly(error))}</p>`; return; }
   if (!card) { body.innerHTML = `<p class="fine">This account isn't available.</p>`; return; }
   if (card.is_me) return render("profile");
+  title.textContent = "";
   body.replaceChildren(profileHeader(card, card));
 
   const actions = $(`<div class="row-btns"></div>`);
@@ -445,7 +446,7 @@ acct.views.notifications = async function viewNotifications() {
     const row = $(`<button class="notif-row${unread.has(n.id) ? " unread" : ""}"><span class="notif-text"></span><em>${ago(n.created_at)}</em></button>`);
     row.querySelector(".notif-text").textContent = n.message;
     const who = people[n.actor_id];
-    row.prepend(who ? avatar(who, "av av-md") : $(`<span class="av av-md notif-mark">F</span>`));
+    row.prepend(who ? avatar(who, "av av-md") : $(`<span class="av av-md notif-mark"><svg viewBox="0 0 32 32"><use href="#fb-mark"/></svg></span>`));
     row.addEventListener("click", () => {
       if (n.story_id) { acct.close(); App().openStory?.(n.story_id); }
       else if (who) render("user", { username: who.username });

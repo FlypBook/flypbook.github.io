@@ -90,7 +90,7 @@ const SETTINGS_UI = [
   ["Captions", [
     ["capsize", "Text size", [["s", "S"], ["m", "M"], ["l", "L"], ["xl", "XL"]]],
     ["capstyle", "Look", [["varied", "New look each story"], ["classic", "Always classic"]]],
-    ["hlcolor", "Highlight color", [["varied", "Mix"], ["#ffd43b", "Gold"], ["#7af7ff", "Ice"], ["#ff8fab", "Pink"], ["#b9fbc0", "Mint"]]],
+    ["hlcolor", "Highlight color", [["varied", "Mix"], ["#f5d35c", "Butter"], ["#bba6f2", "Lilac"], ["#ff8a65", "Coral"], ["#9fe3b8", "Mint"]]],
     ["contrast", "Contrast", [["normal", "Normal"], ["high", "High"]]],
   ]],
   ["Background", [
@@ -540,9 +540,20 @@ const CAPTION = {
   fonts: ["f-sans", "f-serif", "f-grot", "f-round"],
   treatments: ["t-stroke", "t-shadow", "t-plate"],
   highlights: ["h-ink", "h-marker", "h-underline", "h-glow", "h-box", "h-spot", "h-bounce"],
-  colors: [["#ffd43b", "#1b1400"], ["#7af7ff", "#00262b"], ["#ff8fab", "#33000e"], ["#b9fbc0", "#0b2a10"],
-           ["#ffb86b", "#2e1600"], ["#c4b5fd", "#1a0f3d"], ["#ff6b6b", "#2b0000"], ["#fde68a", "#2a2000"]],
+  // Printing-ink highlight colors (butter, lilac, coral, mint, sky, rose), each with a dark ink for text on it.
+  colors: [["#f5d35c", "#1b1400"], ["#bba6f2", "#1a0f3d"], ["#ff8a65", "#2b0d00"], ["#9fe3b8", "#0b2a10"],
+           ["#8fd3ff", "#00263b"], ["#ffb3c7", "#33000e"]],
 };
+
+// Each kind of story has its own printed ink, like the colored band on an old paperback.
+// "light" inks get dark text on them.
+const GENRE_INK = {
+  "aita": ["#f0532e"], "tifu": ["#f29b2b", "light"], "entitled people": ["#d93f6a"], "malicious compliance": ["#2f7a4b"],
+  "petty revenge": ["#b8321f"], "family drama": ["#2c5aa0"], "friendship drama": ["#ef8fb2", "light"], "school drama": ["#23858f"],
+  "workplace drama": ["#6b6a2a"], "roommate drama": ["#a3662a"], "wholesome twist": ["#f5d35c", "light"], "mystery": ["#1f5c3f"],
+  "unexplained / eerie": ["#4a2e73"],
+};
+const genreInk = g => GENRE_INK[g] || ["#5b2fb3"];
 function captionStyle(seed) {
   const r = mulberry32(seed ^ 0x9e3779b9), pick = a => a[Math.floor(r() * a.length)];
   let font = pick(CAPTION.fonts), highlight = pick(CAPTION.highlights);
@@ -579,7 +590,7 @@ function openUser(username) {
 /** A round profile picture: the uploaded photo, or the first letter on the reader's color. */
 function avatar(p, cls = "av") {
   const a = el("span", cls);
-  a.style.setProperty("--pc", p?.profile_color || "#8b5cf6");
+  a.style.setProperty("--pc", p?.profile_color || "#5b2fb3");
   if (p?.avatar_url) {
     const img = document.createElement("img");
     img.src = p.avatar_url; img.alt = ""; img.loading = "lazy";
@@ -597,17 +608,25 @@ function buildCard(story) {
   const media = el("div", "media");
   const scrim = el("div", "scrim");
 
-  // Chapter line: what kind of story, how long, who wrote or asked for it
+  // Meta line: the genre's ink band, how long, who wrote or asked for it
+  const [ink, tone] = genreInk(d.genre);
+  card.style.setProperty("--band", ink);
   const chapter = el("div", "chapter");
-  chapter.append(el("span", null, d.genre), el("span", null, minutes(d.est_read_seconds)));
+  chapter.append(el("span", `band${tone ? " " + tone : ""}`, d.genre), el("span", null, `${minutes(d.est_read_seconds)} read`));
   if (d.source === "user" && d.author) chapter.append(personLink("by ", d.author));
   else chapter.append(el("span", null, "AI story"));
   if (d.username) chapter.append(personLink("requested by ", d.username));
   if (d.via) chapter.append(el("span", "via", d.via));
 
-  // Opening: the title, centered like a chapter heading, then it fades into the captions
+  // Opening: a little paperback cover (genre band, title, writer) turns in, then the words start
   const intro = el("div", "intro");
-  intro.append(el("small", null, LEVEL_LABEL[d.reading_level] || "A FlypBook story"), el("h2", null, d.title), el("div", "rule"));
+  const cover = el("div", "cover");
+  const band = el("div", `cover-band${tone ? " " + tone : ""}`);
+  band.append(el("span", "cover-kind", d.genre), el("span", "cover-mark", "F"));
+  const foot = el("div", "cover-foot");
+  foot.append(el("span", null, d.source === "user" && d.author ? `@${d.author}` : "FlypBook"), el("span", null, LEVEL_LABEL[d.reading_level] || minutes(d.est_read_seconds)));
+  cover.append(band, el("h2", null, d.title), foot);
+  intro.append(cover);
   const captions = el("div", "captions");
 
   const playmark = el("div", "playmark");
@@ -867,11 +886,13 @@ const timeAgo = t => {
   return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`;
 };
 
+const commentTitle = n => (n ? `${formatCount(n)} ${n === 1 ? "comment" : "comments"}` : "Comments");
+
 async function openComments(story) {
   closeSheets();
   commentStory = story;
   commentsSheet.hidden = false;
-  document.getElementById("comments-title").textContent = `${formatCount(story.data.comment_count || 0)} comments`;
+  document.getElementById("comments-title").textContent = commentTitle(story.data.comment_count);
   commentList.innerHTML = `<p class="fine">Loading...</p>`;
   commentForm.hidden = false;
   commentInput.placeholder = user() ? "Add a comment..." : "Log in to comment";
@@ -880,7 +901,7 @@ async function openComments(story) {
   catch { commentList.innerHTML = `<p class="fine">Comments are coming soon.</p>`; return; }
   if (commentStory !== story) return;
   commentList.replaceChildren();
-  if (!rows.length) commentList.append(el("p", "fine", "No comments yet. Be the first!"));
+  if (!rows.length) commentList.append(el("p", "fine", "No comments yet. Say what you think of it."));
   rows.forEach(c => commentList.append(commentRow(c)));
 }
 
@@ -929,7 +950,7 @@ commentForm.addEventListener("submit", async e => {
   learnFrom(commentStory, 1, 1.5);
   commentStory.data.comment_count = (commentStory.data.comment_count || 0) + 1;
   refreshRail(commentStory);
-  document.getElementById("comments-title").textContent = `${formatCount(commentStory.data.comment_count)} comments`;
+  document.getElementById("comments-title").textContent = commentTitle(commentStory.data.comment_count);
 });
 
 // ---------- Discover ----------

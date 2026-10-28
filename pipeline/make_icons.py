@@ -1,15 +1,15 @@
-"""Draw FlypBook's app icons (an open book, centered, with one violet page mid-flip and a gold ribbon,
-on a black tile with a violet edge) into web/icons/.
+"""Draw FlypBook's app icons (an open book, centered, with one lilac page mid-flip and a butter ribbon,
+on a grape tile) into web/icons/.
 Same shapes as the logo mark in web/index.html. Drawn at 4x and scaled down for smooth edges."""
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "icons"
-TILE, EDGE = (18, 16, 22), (96, 66, 180)
-COVER, PAGE_L, PAGE_R = (76, 47, 153), (243, 236, 223), (230, 220, 203)
-FLIP, SHINE = (139, 92, 246), (154, 118, 248)
-GOLD, RULE = (255, 212, 59), (185, 173, 152)
+TILE = (91, 47, 179)                                       # grape
+COVER, PAGE_L, PAGE_R = (43, 21, 96), (243, 236, 223), (233, 225, 210)
+FLIP, SHINE = (187, 166, 242), (218, 206, 248)              # lilac page mid-turn, with a soft sheen
+GOLD, RULE = (245, 211, 92), (179, 167, 144)
 DY = -0.4                                  # the whole book sits 0.4 units up, like the SVG
 
 
@@ -48,8 +48,6 @@ def icon(size, maskable=False):
         k, off = 0.62, S * 0.19          # keep the art inside the safe zone, still centered
     else:
         d.rounded_rectangle([S * 1 / 32, S * 1 / 32, S * 31 / 32, S * 31 / 32], radius=int(S * 8 / 32), fill=TILE)
-        d.rounded_rectangle([S * 1.5 / 32, S * 1.5 / 32, S * 30.5 / 32, S * 30.5 / 32], radius=int(S * 7.5 / 32),
-                            outline=EDGE, width=max(2, int(S * 0.8 / 32)))
         k, off = 1, 0
     u = S / 32 * k                       # one design unit
     P = lambda pts: [(off + x * u, off + (y + DY) * u) for x, y in pts]
