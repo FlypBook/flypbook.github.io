@@ -65,17 +65,19 @@ function studioReflections(renderer) {
   return tex;
 }
 
-/** The finishing touch every 3D scene gets: a soft vignette, a little contrast, and fine film grain,
- *  so it reads like captured footage instead of a flat render. Runs after tone mapping. */
+/** The finishing touch every 3D scene gets: a soft vignette, a little contrast, fine film grain, and a
+ *  slightly darker level (white captions sit on top), so it reads like captured footage. Runs after tone mapping. */
 const FinishShader = {
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, vignette: { value: 0.32 }, grain: { value: 0.035 } },
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, vignette: { value: 0.32 }, grain: { value: 0.035 }, level: { value: 0.86 } },
   vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float time, vignette, grain; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float time, vignette, grain, level; varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + time * 7.13) * 43758.5453); }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       c.rgb = mix(c.rgb, c.rgb * c.rgb * (3.0 - 2.0 * c.rgb), 0.18);           // gentle S-curve contrast
+      c.rgb = c.rgb * level / (1.0 + 0.35 * max(c.rgb - 0.7, 0.0));            // a step darker, and bright areas
+                                                                                 // (snow, sky) roll off instead of glaring
       vec2 d = vUv - 0.5; c.rgb *= 1.0 - vignette * dot(d, d) * 2.2;            // darker corners
       c.rgb += (hash(vUv * 731.0) - 0.5) * grain;                                // film grain
       gl_FragColor = c;
@@ -94,7 +96,7 @@ class Scene3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene = new THREE.Scene();
     this.scene.environment = studioReflections(this.renderer);
@@ -102,7 +104,14 @@ class Scene3D {
     this.camera = new THREE.PerspectiveCamera(70, 9 / 16, 0.05, 250);
     this.scene.add(this.camera);
     this.build();
+    if (this.sunDir) this.tameOutdoorLight();
     this.setupPost();
+  }
+  /** Outdoor scenes were first tuned for flat gradient skies. Under the real sky (which already lights
+   *  everything) their extra fill light and pale fog washed the picture out, so tone both down. */
+  tameOutdoorLight() {
+    this.scene.traverse(o => { if (o.isHemisphereLight || o.isAmbientLight) o.intensity *= 0.6; });
+    if (this.scene.fog) this.scene.fog.color.lerp(new THREE.Color(0x7f9fc4), 0.35).multiplyScalar(0.85);
   }
   setupPost() {
     const b = this.bloom || this.constructor.bloom;  // a scene can pick its glow in build() (e.g. night worlds)
@@ -154,7 +163,7 @@ class Scene3D {
   }
   /** A physically based sky (real atmosphere scattering, sun disc, glowing horizon) that also lights
    *  the scene: reflections and ambient light come from the same sky. Returns the sun direction. */
-  sky({ elevation = 22, azimuth = 200, turbidity = 4, rayleigh = 1.4, mie = 0.004, mieG = 0.82 } = {}) {
+  sky({ elevation = 22, azimuth = 200, turbidity = 3, rayleigh = 2.2, mie = 0.004, mieG = 0.82 } = {}) {
     const dir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - elevation), THREE.MathUtils.degToRad(azimuth));
     const make = () => {
       const s = new Sky();
@@ -174,12 +183,12 @@ class Scene3D {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment?.dispose();
     this.scene.environment = pmrem.fromScene(env).texture;
-    this.scene.environmentIntensity = 0.75;
+    this.scene.environmentIntensity = 0.6;
     pmrem.dispose();
     envSky.geometry.dispose(); envSky.material.dispose();
     // The physical sky is very bright (real-world units): expose for it, and only let truly bright
     // things (the sun, sparkles on water) glow.
-    this.renderer.toneMappingExposure = 0.5;
+    this.renderer.toneMappingExposure = 0.42;
     this.bloom ||= { strength: 0.22, threshold: 2.2, radius: 0.4 };
     this.sunDir = dir;
     return dir;
@@ -405,7 +414,9 @@ class Parkour3D extends Scene3D {
     this.platforms = [{ x: 0, z: 2, len: 5, top: 1, wide: 1, depth: 3, kind: "grass" }];
     this.islands = [];
     this.pos = new THREE.Vector3(0.5, 2.6, 0);
-    this.look = new THREE.Vector3(0.5, 2, -6);
+    this.look = new THREE.Vector3(0.5, 2.4, -11);
+    this.camX = 0.5; this.camY = 2.62;
+    this.camera.fov = 68;
     this.dist = 0;
     this.extend(true);
   }
@@ -414,12 +425,12 @@ class Parkour3D extends Scene3D {
     const r = this.rand;
     let last = this.platforms[this.platforms.length - 1], added = force;
     while (last.z - last.len > -this.dist - 60) {
-      const gap = 1 + Math.floor(r() * 3);
+      const gap = 1 + Math.floor(r() * 2);
       last = {
-        x: Math.max(-3, Math.min(3, last.x + Math.floor(r() * 3) - 1)),
+        x: Math.max(-2, Math.min(2, last.x + (r() < 0.3 ? (r() < 0.5 ? -1 : 1) : 0))),
         z: last.z - last.len - gap,
-        len: 1 + Math.floor(r() * 3),
-        top: Math.max(-1, Math.min(6, last.top + (gap >= 3 ? Math.floor(r() * 2) - 1 : Math.floor(r() * 3) - 1))),
+        len: 2 + Math.floor(r() * 3),
+        top: Math.max(0, Math.min(5, last.top + (r() < 0.35 ? (gap >= 3 ? -1 : r() < 0.5 ? -1 : 1) : 0))),
         wide: r() < 0.3 ? 2 : 1,
         depth: 2 + Math.floor(r() * 3),
         kind: this.surfaces[Math.floor(r() * this.surfaces.length)],
@@ -480,19 +491,22 @@ class Parkour3D extends Scene3D {
     return { x: 0.5, y: 1, ground: true };
   }
   update(dt) {
-    this.dist += 0.095 * dt;  // sprint speed in blocks per frame
+    this.dist += 0.08 * dt;  // run speed in blocks per frame
     this.extend(false);
-    const p = this.path(this.dist), ahead = this.path(this.dist + 3.5);
-    const bob = p.ground ? Math.sin(this.t * 15) * 0.045 : 0;
-    this.pos.set(this.pos.x + (p.x - this.pos.x) * Math.min(1, 0.15 * dt), p.y + 1.62 + bob, -this.dist);
+    const p = this.path(this.dist);
+    // A calm camera (it sits behind story text): it eases into jumps and turns, looks far ahead at the
+    // average height of the next few blocks, and barely bobs.
+    let ax = 0, ay = 0;
+    for (const k of [5, 8, 11]) { const q = this.path(this.dist + k); ax += q.x / 3; ay += q.y / 3; }
+    this.camX += (p.x - this.camX) * Math.min(1, 0.05 * dt);
+    this.camY += (p.y + 1.62 - this.camY) * Math.min(1, 0.1 * dt);
+    const bob = p.ground ? Math.sin(this.t * 10) * 0.012 : 0;
+    this.pos.set(this.camX, this.camY + bob, -this.dist);
     this.camera.position.copy(this.pos);
-    this.look.lerp(new THREE.Vector3(ahead.x, ahead.y + 1.25, -this.dist - 3.5), Math.min(1, 0.1 * dt));
+    this.look.lerp(new THREE.Vector3(this.camX * 0.5 + ax * 0.5, ay + 1.35, -this.dist - 11), Math.min(1, 0.025 * dt));
     this.camera.lookAt(this.look);
-    const fov = p.ground ? 72 : 80;  // speed "kick" while airborne
-    this.camera.fov += (fov - this.camera.fov) * Math.min(1, 0.08 * dt);
-    this.camera.updateProjectionMatrix();
-    this.arm.rotation.x = -0.25 + Math.sin(this.t * 15) * (p.ground ? 0.22 : 0.05);
-    this.arm.position.y = -0.3 + (p.ground ? Math.abs(Math.sin(this.t * 15)) * 0.03 : 0.04);
+    this.arm.rotation.x = -0.25 + Math.sin(this.t * 10) * (p.ground ? 0.07 : 0.02);
+    this.arm.position.y = -0.3 + (p.ground ? Math.abs(Math.sin(this.t * 10)) * 0.01 : 0.015);
     this.sun.target.position.set(this.pos.x, this.pos.y - 2, this.pos.z - 8);
     if (!this.sunDir) this.sun.position.set(this.pos.x + 8, this.pos.y + 18, this.pos.z + 6);
     if (this.sea) {

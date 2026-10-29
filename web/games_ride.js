@@ -85,11 +85,11 @@ class DesertDrive extends Scene3D {
 class Snowboard extends Scene3D {
   build() {
     const r = this.rand;
-    this.sky({ elevation: 30, azimuth: 200, turbidity: 2, rayleigh: 1 });
+    this.sky({ elevation: 30, azimuth: 200, turbidity: 2, rayleigh: 2 });
     this.scene.fog = new THREE.Fog(0xe8f2ff, 20, 90);
     this.scene.add(new THREE.HemisphereLight(0xdfeeff, 0x8aa0c0, 1.3));
     this.sun = this.sunLight(0xffffff, 2.2, 10);
-    this.snow = groundTexture(r, "#f2f6ff", 0.06, 40);
+    this.snow = groundTexture(r, "#d9e2ee", 0.07, 40);   // blue-grey snow: pure white glared behind captions
     const ground = mesh(new THREE.PlaneGeometry(200, 300), std(0xffffff, { map: this.snow, roughness: 0.95 }), 0, 0, -130, this.scene);
     ground.rotation.x = -Math.PI / 2;
     this.trees = [];
