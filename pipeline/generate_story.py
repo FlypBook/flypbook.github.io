@@ -182,6 +182,8 @@ before deciding. Set logic_ok to false if you find even one real error.
 - Timeline: do times, days, and the order of events make sense?
 - People: are ages, jobs, and relationships consistent? Does every action have a believable reason?
 - Plot: could a first-time reader explain what happened and why? Anything random, cartoonish, or impossible?
+- Twist: does the late reveal contradict anything shown earlier? (Example of a real error: a fluent native
+  speaker is first described mispronouncing her own language "terribly". Money or items that change amounts.)
 - Ending: if it asks readers to judge, do both sides really have a point?
 - Question: does every detail in the question and choices match the post exactly? Is the marked answer
   clearly correct, and the other three clearly wrong?
