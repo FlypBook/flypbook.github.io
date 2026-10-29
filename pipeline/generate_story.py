@@ -461,7 +461,9 @@ def review_story(api_key, data):
 BRANDS = {"iPads": "tablets", "iPad": "tablet", "iPhones": "phones", "iPhone": "phone", "MacBook": "laptop", "AirPods": "earbuds", "Netflix": "the streaming app",
           "Venmo": "the payment app", "Cash ?App": "the payment app", "Instagram": "social media", "TikTok": "social media",
           "Snapchat": "social media", "Uber": "a rideshare", "Starbucks": "the coffee shop", "McDonald's": "the burger place",
-          "Walmart": "the store", "PlayStation": "console", "Xbox": "console", "Nintendo Switch": "console"}
+          "Walmart": "the store", "PlayStation": "console", "Xbox": "console", "Nintendo Switch": "console",
+          "Google Docs?": "the shared doc", "Google Drive": "the shared drive", "YouTube": "a video site",
+          "Spotify": "the music app", "Discord": "the group server", "FaceTime": "video call"}
 
 
 def clean_story(data):
