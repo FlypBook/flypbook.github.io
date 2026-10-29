@@ -2,8 +2,8 @@
 Turn published FlypBook stories into vertical, TikTok-ready videos (720x1280 MP4).
 
 Each video: the AI narration, a real-footage background (several clips back to back from web/videos), big
-word-by-word captions that light up as they're read, the post title in a card while the title is read, and a
-small "AI story" label the whole time.
+word-by-word captions that light up as they're read, and the post title in a card while the title is read.
+(The AI-generated label is TikTok's own, switched on when posting.)
 
   python make_videos.py                 render the 3 newest published stories into output/videos/
   python make_videos.py --story <id>    render one story
@@ -70,12 +70,11 @@ WrapStyle: 0
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{font},66,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,5,2,5,40,40,0,1
 Style: Title,{font},40,&H00151515,&H00151515,&H00FFFFFF,&H00FFFFFF,1,0,0,0,100,100,0,0,3,18,0,8,60,60,170,1
-Style: Tag,{font},26,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,1,0,0,0,100,100,0,0,3,8,0,7,30,30,40,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    events = [f"Dialogue: 2,0:00:00.00,{seconds(total_ms)},Tag,,0,0,0,,FlypBook · AI story"]
+    events = []
     if title_words:
         title = ass_escape(" ".join(words[:title_words]))
         events.append(f"Dialogue: 1,0:00:00.00,{seconds(starts[min(title_words, n)])},Title,,0,0,0,,{title}")

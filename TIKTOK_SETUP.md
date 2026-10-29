@@ -58,5 +58,5 @@ From then on it posts publicly three times a day by itself.
 ## Good to know
 - **Once a year** the TikTok login expires. The poster warns about two weeks before (in the GitHub Actions log); just repeat step 5.
 - **Change how often it posts:** ask Claude (it's the schedule in `.github/workflows/tiktok.yml`).
-- **Every post is labeled AI-generated** on TikTok, and the video says "FlypBook · AI story". Keep it that way: TikTok requires it.
+- **Every post gets TikTok's own "AI-generated" label**, switched on automatically. Keep it that way: TikTok requires it.
 - **Account risk:** TikTok can limit accounts that post a lot of automated content. Three a day, all different stories, is a reasonable pace.
