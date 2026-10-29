@@ -102,29 +102,55 @@ class StrikeLane extends Scene3D {
   }
   reset() {
     const spots = []; for (let row = 0; row < 4; row++) for (let k = 0; k <= row; k++) spots.push([(k - row / 2) * 0.32, -24 - row * 0.3]);
-    this.pins.forEach((p, i) => { p.m.position.set(spots[i][0], 0, spots[i][1]); p.m.rotation.set(0, 0, 0); p.v = null; });
+    this.pins.forEach((p, i) => { p.m.position.set(spots[i][0], 0, spots[i][1]); p.m.rotation.set(0, 0, 0); p.v = null; p.wobble = 0; });
     this.ball.material.color.setHSL(this.rand(), 0.8, 0.45);
     this.hook = (this.rand() < 0.5 ? -1 : 1) * (0.6 + this.rand() * 0.4);
+    this.pickResult();
     this.bz = 0; this.phase = "roll"; this.timer = 0;
+  }
+  /** Real bowling isn't all strikes. Decide this roll's result, where the ball meets the pins, and which pins
+   *  stay up. Pins are numbered row by row: 0 is the head pin, 6 and 9 are the back corners. */
+  pickResult() {
+    const r = this.rand(), side = this.rand() < 0.5 ? -1 : 1, pick = a => a[Math.floor(this.rand() * a.length)];
+    this.gutter = false;
+    if (r < 0.32) { this.impact = side * 0.12; this.standing = []; }                         // strike
+    else if (r < 0.62) { this.impact = side * 0.15; this.standing = pick([[9], [6], [3], [5], [8, 9], [7], [9, 5], [6, 3]]); }  // one or two left
+    else if (r < 0.72) { this.impact = side * 0.05; this.standing = pick([[6, 9], [3, 5], [6, 8], [3, 9]]); }   // a split
+    else if (r < 0.92) {                                                                       // off-center: the far side stays up
+      this.impact = side * (0.42 + this.rand() * 0.15);
+      this.standing = this.pins.map((p, i) => i).filter(i => this.pins[i].m.position.x * side < -0.05 && this.rand() < 0.85);
+    } else { this.gutter = true; this.impact = side * 1.6; this.standing = [...this.pins.keys()]; }  // gutter ball
+    this.standing = [...new Set(this.standing)];
+  }
+  /** The ball's sideways position at fraction u (0 to 1) of the lane: a hook that ends exactly at the impact point. */
+  ballX(u) {
+    const x0 = -this.hook * 0.25, curve = this.hook * 0.55 * Math.sin(u * Math.PI) * (1 - u);
+    if (this.gutter) return Math.min(1.6, Math.max(-1.6, x0 + (this.impact - x0) * Math.pow(u, 1.6) * 1.6));
+    return x0 + (this.impact - x0) * u * u + curve;
   }
   update(dt) {
     if (this.phase === "roll") {
       this.bz -= 0.32 * dt;
-      const u = this.bz / -24;
-      this.ball.position.set(this.hook * Math.sin(u * Math.PI) * 0.9 * (1 - u * 0.6) + (1 - u) * -this.hook * 0.2, 0.22, this.bz);
+      const u = Math.min(1, this.bz / -24), x = this.ballX(u);
+      const inGutter = Math.abs(x) > 1.35;
+      this.ball.position.set(x, inGutter ? 0.05 : 0.22, this.bz);
       this.ball.rotation.x -= 0.4 * dt;
       if (this.bz < -23.6) {
         this.phase = "hit";
-        for (const p of this.pins) {
+        this.pins.forEach((p, i) => {
+          if (this.standing.includes(i)) { p.wobble = this.gutter ? 0 : 0.12 + this.rand() * 0.1; return; }  // rocks, stays up
           const dx = p.m.position.x - this.ball.position.x, dz = p.m.position.z - this.ball.position.z, d = Math.hypot(dx, dz) + 0.2;
           const f = 0.35 / d;
           p.v = V(dx / d * f + (this.rand() - 0.5) * 0.06, 0.05 + this.rand() * 0.08, -0.15 - this.rand() * 0.12 + dz * 0.02);
           p.spin = V((this.rand() - 0.5) * 0.4, (this.rand() - 0.5) * 0.4, (this.rand() - 0.5) * 0.4);
-        }
+        });
       }
     } else {
       this.timer += dt;
       this.ball.position.z -= 0.2 * dt;
+      for (const p of this.pins) if (p.wobble) {  // a standing pin teeters, then settles
+        p.m.rotation.z = Math.sin(this.timer * 0.35) * p.wobble * Math.max(0, 1 - this.timer / 60);
+      }
       for (const p of this.pins) if (p.v) {
         p.v.y -= 0.008 * dt;
         p.m.position.addScaledVector(p.v, dt);

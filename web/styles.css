@@ -25,10 +25,13 @@
   --line: rgba(255, 253, 248, 0.1);
   --app-w: min(100vw, 480px);
   --ease: cubic-bezier(0.2, 0.9, 0.25, 1);
-  --dock-h: 58px;
+  --dock-h: 56px;
   --safe-t: env(safe-area-inset-top);
   --safe-b: env(safe-area-inset-bottom);
-  --above-dock: calc(var(--dock-h) + var(--safe-b));
+  /* The dock only needs to clear the home-swipe bar, not the whole safe area (34px on iPhones), which left a
+     tall empty band under the icons. */
+  --dock-safe: max(0px, calc(var(--safe-b) - 20px));
+  --above-dock: calc(var(--dock-h) + var(--dock-safe));
   --sans: "Archivo", "Helvetica Neue", Arial, system-ui, sans-serif;
   --serif: "Young Serif", Georgia, "Times New Roman", serif;
   /* per-story (set by the app) */
@@ -254,7 +257,7 @@ svg.ln path[d*="h.01"] { stroke-width: 2.8; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 
 /* ---------- Dock: a solid black bar with one purple button ---------- */
-#bottomnav { position: absolute; z-index: 8; left: 0; right: 0; bottom: 0; height: var(--above-dock); padding-bottom: var(--safe-b);
+#bottomnav { position: absolute; z-index: 8; left: 0; right: 0; bottom: 0; height: var(--above-dock); padding-bottom: var(--dock-safe);
   display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; color: var(--dock-on); background: var(--dock-bg); border-top: 1px solid var(--dock-line);
   transition: background 0.3s; }
 #bottomnav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 100%; position: relative;
