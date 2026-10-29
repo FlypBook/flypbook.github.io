@@ -251,7 +251,7 @@ def generate_regular(api_key):
             print(f"  Error: {error}")
             continue
         if result["status"] == "approved":
-            twin = similar_story(result["record"]["title"])
+            twin = similar_story(result["record"]["title"], result["record"]["story"])
             if twin:
                 print(f"  Skipped: too close to a published story (\"{twin}\").")
             else:
@@ -266,13 +266,15 @@ STOP_WORDS = set("a an the my me i i'm im and or but to of for in on at by with 
                  "about over into up out just only all every".split())
 
 
-def similar_story(title):
-    """A published story whose title shares most of its key words with this one (same premise twice), or None."""
-    words = lambda t: {w for w in re.findall(r"[a-z']+", t.lower()) if w not in STOP_WORDS and len(w) > 2}
-    new = words(title)
-    for row in supabase("GET", "stories", "select=title&status=eq.published&source=eq.ai") or []:
-        old = words(row["title"])
-        if new and old and len(new & old) / len(new | old) >= 0.3:
+def similar_story(title, story=""):
+    """A published story that's the same premise as this one (a close title, or heavily overlapping words in the
+    story itself), or None. Thresholds were set on the first repeats (title 0.3+, story 0.2+ word overlap)."""
+    def overlap(a, b, min_len):
+        wa = {w for w in re.findall(r"[a-z']+", a.lower()) if w not in STOP_WORDS and len(w) > min_len}
+        wb = {w for w in re.findall(r"[a-z']+", b.lower()) if w not in STOP_WORDS and len(w) > min_len}
+        return len(wa & wb) / len(wa | wb) if wa and wb else 0
+    for row in supabase("GET", "stories", "select=title,body&status=eq.published&source=eq.ai") or []:
+        if overlap(title, row["title"], 2) >= 0.3 or (story and overlap(story, row["body"], 3) >= 0.2):
             return row["title"]
     return None
 
