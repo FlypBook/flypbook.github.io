@@ -251,10 +251,30 @@ def generate_regular(api_key):
             print(f"  Error: {error}")
             continue
         if result["status"] == "approved":
-            publish(result["record"])
-            done += 1
+            twin = similar_story(result["record"]["title"])
+            if twin:
+                print(f"  Skipped: too close to a published story (\"{twin}\").")
+            else:
+                publish(result["record"])
+                done += 1
         print(f"  Tokens used so far this run: {g.TOKENS_USED:,}")
     return done
+
+
+STOP_WORDS = set("a an the my me i i'm im and or but to of for in on at by with from my so now then is was are be been "
+                 "after before when who what why how her his him she he they them their our we it its this that because "
+                 "about over into up out just only all every".split())
+
+
+def similar_story(title):
+    """A published story whose title shares most of its key words with this one (same premise twice), or None."""
+    words = lambda t: {w for w in re.findall(r"[a-z']+", t.lower()) if w not in STOP_WORDS and len(w) > 2}
+    new = words(title)
+    for row in supabase("GET", "stories", "select=title&status=eq.published&source=eq.ai") or []:
+        old = words(row["title"])
+        if new and old and len(new & old) / len(new | old) >= 0.3:
+            return row["title"]
+    return None
 
 
 def main():
