@@ -525,6 +525,9 @@ def validate_story(data):
         problems.append(f"unknown tone '{data['tone']}'")
     if data["reading_level"] not in READING_LEVELS:
         problems.append(f"unknown reading level '{data['reading_level']}'")
+    longest = max(len(p.split()) for p in re.split(r"\n\s*\n", data["story"]))
+    if longest > 110:  # real posts use short phone-style paragraphs, not walls of text
+        problems.append(f"a paragraph is {longest} words long; keep every paragraph under 90 words")
     tells = sorted({m.group(0).lower() for m in AI_TELLS.finditer(data["title"] + "\n" + data["story"])})
     if tells:
         problems.append("AI-sounding phrases: " + ", ".join(f'"{t}"' for t in tells))
