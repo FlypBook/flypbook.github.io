@@ -68,4 +68,5 @@ for size in (192, 512):
 icon(512, maskable=True).save(OUT / "icon-maskable-512.png")
 icon(180).save(OUT / "apple-touch-icon.png")
 icon(32).save(OUT / "favicon-32.png")
+icon(1024).save(OUT / "icon-1024.png")  # app stores and developer portals (e.g. TikTok) want 1024x1024
 print("Icons saved to", OUT)
