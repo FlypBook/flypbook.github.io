@@ -476,7 +476,7 @@ def clean_story(data):
         text = re.sub(r"\bWIBTA\b", "would I be the jerk", text)
         text = re.sub(r",\s*([.!?])", r"\1", text)
         for brand, plain in BRANDS.items():                              # no real brands in the stories
-            text = re.sub(rf"\b{brand}\b", plain, text)
+            text = re.sub(rf"\b(?:[Tt]he |[Aa]n? )?{brand}\b", plain, text)  # absorbs "the"/"a" so it never doubles
         data["story"] = text
     if isinstance(data, dict) and isinstance(data.get("title"), str):
         data["title"] = re.sub(r"\s*[\u2014\u2013]\s*", ", ", data["title"]).strip().strip('"')
