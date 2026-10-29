@@ -112,3 +112,9 @@ Requirements that every phase must follow. The full original phase plan lives in
 - Sky Parkour was rebuilt: real sky at a random time of day, a shimmering ocean (or a lava sea) far below, soft drifting clouds, six block types (grass, stone, bricks, planks, gold, ice), islands with trees, a sleeve-and-hand arm, and six worlds (meadow, snow, desert, cherry blossom, volcano, neon).
 - Slower phones step down automatically (`adaptQuality`): glow off, then effects off, then lower resolution.
 - three.js add-ons load through an import map in `index.html`, pinned to three@0.169.0.
+
+## Automatic TikTok posting (2026-10-29)
+- `pipeline/make_videos.py` turns a published story into a 720x1280 MP4: the AI narration, real-footage background (one mood, clips back to back), word-by-word captions with the spoken word highlighted, the title in a card while it's read, and a "FlypBook · AI story" label.
+- `pipeline/post_tiktok.py` posts through TikTok's official Content Posting API with the AI-generated flag on: the oldest unposted new-writer story each run. The TikTok login (refresh token, which TikTok rotates) and the list of posted stories live in Supabase (`supabase/007_tiktok.sql`, server-only tables).
+- `.github/workflows/tiktok.yml` runs it three times a day; it does nothing until the TikTok keys are added. Private posts only (`SELF_ONLY`) until TikTok approves the app; then set the repo variable `TIKTOK_PRIVACY=PUBLIC_TO_EVERYONE`.
+- Owner's steps: `TIKTOK_SETUP.md`. New pages for the app review and login: `web/terms.html`, `web/tiktok.html`.
