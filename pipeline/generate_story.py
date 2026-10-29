@@ -475,6 +475,7 @@ def clean_story(data):
         text = re.sub(r"\bAITA\b", "am I the jerk", text)
         text = re.sub(r"\bWIBTA\b", "would I be the jerk", text)
         text = re.sub(r",\s*([.!?])", r"\1", text)
+        text = re.sub(r"\b([Ll])et us call\b", r"\1et's call", text)        # nobody types "let us call her"
         for brand, plain in BRANDS.items():                              # no real brands in the stories
             text = re.sub(rf"\b(?:[Tt]he |[Aa]n? )?{brand}\b", plain, text)  # absorbs "the"/"a" so it never doubles
         data["story"] = text
