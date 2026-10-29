@@ -61,7 +61,7 @@ GENRES = [
 TONES = ["funny", "dramatic", "suspenseful", "heartwarming", "eerie", "satisfying"]
 
 # Who posts, what kind of post, and a believable situation: see story_seeds.py.
-from story_seeds import GENRE_TONES, POST_TYPES, PREMISES
+from story_seeds import GENRE_TONES, NAMES, POST_TYPES, PREMISES
 
 READING_LEVELS = ["easy", "medium", "challenging"]
 
@@ -578,6 +578,7 @@ def build_prompt(request=None, genre=None, tone=None, reading_level=None, cursor
 
     user_prompt = (f"Post type (genre): {genre}\nTone: {tone}\nReading level: {reading_level}\n"
                    "Who's posting: pick an age (15-23) and situation that fit the story naturally.\n"
+                   f"First names, if you use any: only from {', '.join(random.sample(NAMES, 5))}.\n"
                    f"Title rule: the title {post['title']}\n"
                    f"Ending rule: {post['ending']}\n")
     if request:

@@ -203,3 +203,16 @@ SECOND_LAYERS = [
     "a promise someone made weeks ago",
     "a grade, a deadline, or a teacher's rule",
 ]
+
+# First names to offer the writer. Left alone it reuses the same few (Leo and Chloe were in 4 of the first 9
+# stories), which makes a feed feel fake, so every story gets its own random handful.
+NAMES = [
+    "Aaliyah", "Abby", "Adrian", "Aiden", "Alana", "Alex", "Amara", "Andre", "Angela", "Ava", "Bianca", "Brandon",
+    "Brianna", "Caleb", "Camila", "Carlos", "Cassie", "Cole", "Dana", "Daniel", "Darius", "Destiny", "Devin", "Diego",
+    "Elena", "Eli", "Emily", "Erin", "Ethan", "Faith", "Gabe", "Grace", "Hannah", "Hector", "Imani", "Isaac", "Jada",
+    "Jake", "Jasmine", "Javier", "Jenna", "Jordan", "Josh", "Kayla", "Keisha", "Kevin", "Kyle", "Lauren", "Layla",
+    "Lena", "Liam", "Lucas", "Luis", "Mackenzie", "Malik", "Maria", "Marcus", "Maya", "Megan", "Mia", "Nadia",
+    "Nate", "Nia", "Noah", "Olivia", "Omar", "Paige", "Priya", "Quinn", "Rachel", "Ray", "Riley", "Rosa", "Ryan",
+    "Sam", "Sara", "Sean", "Shay", "Sofia", "Tanya", "Tariq", "Tessa", "Trevor", "Tyler", "Valeria", "Vanessa",
+    "Will", "Xavier", "Yasmin", "Zach", "Zoe",
+]
