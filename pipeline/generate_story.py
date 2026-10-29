@@ -707,6 +707,7 @@ def generate(api_key, request=None, genre=None, tone=None, reading_level=None, u
             "request": {"text": request, "requested_by": user} if request else None,
             "ai_generated": True,
             "model": model,
+            "premise_pos": cursor,  # place in the premise order (see premise_at); saved so runs never repeat one
             "attempts": attempt,
             "safety": safety,
             "logic": logic,

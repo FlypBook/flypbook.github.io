@@ -14,6 +14,7 @@ import datetime
 import json
 import os
 import random
+import re
 import sys
 import time
 import urllib.error
@@ -97,7 +98,9 @@ def publish(record, requested_by=None):
         "question_prompt": q["prompt"],
         "question_choices": q["choices"],
         "requested_by": requested_by,
-        "model": record["model"],
+        # The premise position rides along on the model name (the app never shows it), so every run can
+        # continue the premise order where the last one stopped.
+        "model": record["model"] + (f"#p{record['premise_pos']}" if record.get("premise_pos") is not None else ""),
     })[0]
     supabase("POST", "story_answers", body={
         "story_id": story["id"], "answer_index": q["answer_index"], "explanation": q["explanation"],
@@ -232,9 +235,11 @@ def generate_regular(api_key):
     popular = popular_kinds()
     if popular:
         print("Readers' favorites lately: " + ", ".join(f"{p['genre']}/{p['tone']} ({p['score']})" for p in popular[:5]))
-    # Where we are in the premise order: one step per AI story written by this writer (any status), so local
-    # and GitHub runs share one place in the list and no premise repeats until all have been used.
-    cursor = len(supabase("GET", "stories", "select=id&source=eq.ai&created_at=gte.2026-10-28T12:00:00Z") or [])
+    # Where we are in the premise order: just after the last premise a published story used, so local and
+    # GitHub runs share one place in the list and no premise repeats until all have been used.
+    rows = supabase("GET", "stories", "select=model&source=eq.ai&created_at=gte.2026-10-28T12:00:00Z") or []
+    used = [int(m.group(1)) for r in rows if (m := re.search(r"#p(\d+)$", r.get("model") or ""))]
+    cursor = max(used) + 1 if used else len(rows) + 20  # (+20: the first runs didn't record their place)
     for i in range(STORIES_PER_RUN):
         print(f"\n--- Regular story {i + 1}/{STORIES_PER_RUN}")
         genre, tone = pick_kind(popular)
