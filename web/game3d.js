@@ -231,6 +231,17 @@ const BLOCK_WORLDS = [
     sky: ["#05020f", "#2a0b52"], fog: "#1a0838" },
 ];
 
+// Block-game movement, at 20 ticks a second: a jump launches at 0.42 blocks/tick, then each tick gravity takes
+// 0.08 and air drag keeps 98%. That gives the familiar 1.25-block peak and about 0.6 s in the air.
+const SPRINT = 0.28 / 3;  // sprinting: 0.28 blocks a tick (5.6 a second), in blocks per 60fps frame
+const JUMP_CURVE = (() => { const ys = [0]; let y = 0, vy = 0.42; for (let k = 0; k < 60; k++) { y += vy; vy = (vy - 0.08) * 0.98; ys.push(y); } return ys; })();
+const jumpHeight = t => { const k = Math.min(Math.floor(t), 59), f = t - k; return JUMP_CURVE[k] + (JUMP_CURVE[k + 1] - JUMP_CURVE[k]) * f; };
+/** How many ticks a jump lasts before landing dh blocks higher (or lower, if negative). */
+function landingTick(dh) {
+  for (let k = 7; k < 60; k++) if (JUMP_CURVE[k + 1] <= dh) return k + (JUMP_CURVE[k] - dh) / (JUMP_CURVE[k] - JUMP_CURVE[k + 1]);
+  return 12;
+}
+
 /** A tileable "water ripple" normal map painted in code (sum of soft waves), for a shimmering sea. */
 function rippleNormals(size = 128) {
   const c = document.createElement("canvas");
@@ -415,8 +426,8 @@ class Parkour3D extends Scene3D {
     this.islands = [];
     this.pos = new THREE.Vector3(0.5, 2.6, 0);
     this.look = new THREE.Vector3(0.5, 2.4, -11);
-    this.camX = 0.5; this.camY = 2.62;
-    this.camera.fov = 68;
+    this.camX = 0.5; this.aimX = 0.5; this.stride = 0;
+    this.camera.fov = 70;
     this.dist = 0;
     this.extend(true);
   }
@@ -425,12 +436,15 @@ class Parkour3D extends Scene3D {
     const r = this.rand;
     let last = this.platforms[this.platforms.length - 1], added = force;
     while (last.z - last.len > -this.dist - 60) {
-      const gap = 1 + Math.floor(r() * 2);
+      // Gaps sized for real sprint-jumps: a block up only clears 1-2, level and down jumps clear 2-3.
+      const rise = r() < 0.35 ? (r() < 0.5 ? -1 : 1) : 0;
+      const top = Math.max(0, Math.min(5, last.top + rise)), up = top > last.top;
+      const gap = up ? 1 + Math.floor(r() * 2) : 2 + Math.floor(r() * 2);
       last = {
         x: Math.max(-2, Math.min(2, last.x + (r() < 0.3 ? (r() < 0.5 ? -1 : 1) : 0))),
         z: last.z - last.len - gap,
-        len: 2 + Math.floor(r() * 3),
-        top: Math.max(0, Math.min(5, last.top + (r() < 0.35 ? (gap >= 3 ? -1 : r() < 0.5 ? -1 : 1) : 0))),
+        len: r() < 0.35 ? 1 : 2 + Math.floor(r() * 3),
+        top,
         wide: r() < 0.3 ? 2 : 1,
         depth: 2 + Math.floor(r() * 3),
         kind: this.surfaces[Math.floor(r() * this.surfaces.length)],
@@ -474,39 +488,41 @@ class Parkour3D extends Scene3D {
     }
     for (const k in this.meshes) { this.meshes[k].count = n[k]; this.meshes[k].instanceMatrix.needsUpdate = true; }
   }
-  /** Where the runner's feet are at distance d along the run (arcs over gaps). */
+  /** Where the runner's feet are at distance d along the run, and how fast they're moving (blocks per frame).
+   *  Jumps follow real block-game physics (JUMP_CURVE): the same launch every time, so the arc's height and
+   *  timing are always right; only the sprint speed in the air stretches to fit the gap. */
   path(d) {
     const z = -d, ps = this.platforms;
     for (let i = 0; i < ps.length; i++) {
       const p = ps[i], next = ps[i + 1];
-      const start = p.z + 0.2, takeoff = p.z - p.len + 0.3;
       const cx = p.x + p.wide / 2;
-      if (z <= start && z >= takeoff) return { x: cx, y: p.top, ground: true };
-      if (next && z < takeoff && z > next.z - 0.25) {
-        const t = (takeoff - z) / (takeoff - (next.z - 0.25));
-        const lift = 1.05 + (takeoff - next.z) * 0.22;
-        return { x: cx + (next.x + next.wide / 2 - cx) * t, y: p.top + (next.top - p.top) * t + lift * 4 * t * (1 - t), ground: false };
+      const takeoff = p.z - p.len + 0.25;         // a quarter block before the edge
+      if (z <= p.z + 0.5 && z >= takeoff) return { x: cx, y: p.top, ground: true, speed: SPRINT };
+      if (!next) break;
+      const land = next.z - 0.45, span = takeoff - land;
+      if (z < takeoff && z > land) {
+        const T = landingTick(next.top - p.top), s = (takeoff - z) / span;  // 0 at takeoff, 1 at landing
+        return { x: cx + (next.x + next.wide / 2 - cx) * s, y: p.top + jumpHeight(s * T), ground: false, speed: span / T / 3 };
       }
     }
-    return { x: 0.5, y: 1, ground: true };
+    return { x: 0.5, y: 1, ground: true, speed: SPRINT };
   }
   update(dt) {
-    this.dist += 0.08 * dt;  // run speed in blocks per frame
     this.extend(false);
     const p = this.path(this.dist);
-    // A calm camera (it sits behind story text): it eases into jumps and turns, looks far ahead at the
-    // average height of the next few blocks, and barely bobs.
-    let ax = 0, ay = 0;
-    for (const k of [5, 8, 11]) { const q = this.path(this.dist + k); ax += q.x / 3; ay += q.y / 3; }
-    this.camX += (p.x - this.camX) * Math.min(1, 0.05 * dt);
-    this.camY += (p.y + 1.62 - this.camY) * Math.min(1, 0.1 * dt);
-    const bob = p.ground ? Math.sin(this.t * 10) * 0.012 : 0;
-    this.pos.set(this.camX, this.camY + bob, -this.dist);
+    this.dist += p.speed * dt;
+    // The camera is the player's eyes: it rises and falls with every jump exactly like the game, while the aim
+    // stays steady (it turns slowly toward the course ahead and keeps the same downward tilt).
+    if (p.ground) this.stride += p.speed * dt;
+    const bob = p.ground ? Math.abs(Math.sin(this.stride * Math.PI / 1.1)) * 0.035 : 0;
+    this.camX += (p.x - this.camX) * Math.min(1, 0.3 * dt);
+    this.pos.set(this.camX, p.y + 1.62 + bob, -this.dist);
     this.camera.position.copy(this.pos);
-    this.look.lerp(new THREE.Vector3(this.camX * 0.5 + ax * 0.5, ay + 1.35, -this.dist - 11), Math.min(1, 0.025 * dt));
+    this.aimX += (this.path(this.dist + 7).x - this.aimX) * Math.min(1, 0.04 * dt);
+    this.look.set(this.camX * 0.4 + this.aimX * 0.6, this.pos.y - 2.1, -this.dist - 10);
     this.camera.lookAt(this.look);
-    this.arm.rotation.x = -0.25 + Math.sin(this.t * 10) * (p.ground ? 0.07 : 0.02);
-    this.arm.position.y = -0.3 + (p.ground ? Math.abs(Math.sin(this.t * 10)) * 0.01 : 0.015);
+    this.arm.rotation.x = -0.25 + Math.sin(this.stride * Math.PI / 1.1) * (p.ground ? 0.08 : 0);
+    this.arm.position.y = -0.3 + (p.ground ? bob * 0.3 : 0.02);
     this.sun.target.position.set(this.pos.x, this.pos.y - 2, this.pos.z - 8);
     if (!this.sunDir) this.sun.position.set(this.pos.x + 8, this.pos.y + 18, this.pos.z + 6);
     if (this.sea) {
