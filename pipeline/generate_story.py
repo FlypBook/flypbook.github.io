@@ -476,6 +476,10 @@ def clean_story(data):
         data["story"] = text
     if isinstance(data, dict) and isinstance(data.get("title"), str):
         data["title"] = re.sub(r"\s*[\u2014\u2013]\s*", ", ", data["title"]).strip().strip('"')
+    # Teen app: keep relationships at "dating".
+    for key in ("title", "story"):
+        if isinstance(data, dict) and isinstance(data.get(key), str):
+            data[key] = re.sub(r"\bhook(ed|s|ing)? up with\b", "started dating", data[key], flags=re.IGNORECASE)
     return data
 
 
