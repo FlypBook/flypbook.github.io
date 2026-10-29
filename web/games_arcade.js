@@ -144,7 +144,7 @@ class StrikeLane extends Scene3D {
 class ArrowCam extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#4d9cf5", "#e2f1ff");
+    this.sky({ elevation: 35, azimuth: 225 });
     this.scene.fog = new THREE.Fog(0xe2f1ff, 40, 140);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x4a7a2a, 1.2));
     this.sun = this.sunLight(0xfff2dd, 2.4, 25); this.sun.position.set(-10, 25, -10);

@@ -8,7 +8,7 @@ const dummy = new THREE.Object3D();
 class DroneCanyon extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#5d9ce6", "#ffd9b0");
+    this.sky({ elevation: 13, azimuth: 200, turbidity: 6 });
     this.scene.fog = new THREE.Fog(0xf2c9a0, 25, 120);
     this.scene.add(new THREE.HemisphereLight(0xffe2c4, 0x7a3a1c, 1.2));
     this.sun = this.sunLight(0xffd8a8, 2.4, 25);
@@ -65,7 +65,7 @@ class DroneCanyon extends Scene3D {
 class Coaster extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#3f8cff", "#d6ecff");
+    this.sky({ elevation: 40, azimuth: 160 });
     this.scene.fog = new THREE.Fog(0xd6ecff, 40, 150);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x4a6b2a, 1.2));
     this.sun = this.sunLight(0xfff2dd, 2.4, 20);
@@ -190,7 +190,7 @@ class MineCart extends Scene3D {
 class RooftopRun extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#2a2a72", "#ff8c61");
+    this.sky({ elevation: 3, azimuth: 190, turbidity: 8, rayleigh: 2.6 });
     this.scene.fog = new THREE.Fog(0xe2876a, 30, 140);
     this.scene.add(new THREE.HemisphereLight(0xffc9a8, 0x2a2a50, 1.1));
     this.sun = this.sunLight(0xffb27a, 2.3, 16);

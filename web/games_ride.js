@@ -9,7 +9,7 @@ const recycle = (obj, span, limit = 12) => { if (obj.position.z > limit) obj.pos
 class DesertDrive extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#2b2a6b", "#ff9a5a");
+    this.sky({ elevation: 4, azimuth: 180, turbidity: 9, rayleigh: 2.3 });
     this.scene.fog = new THREE.Fog(0xf7a46b, 30, 140);
     this.scene.add(new THREE.HemisphereLight(0xffd2a8, 0x6b4a2a, 1.1));
     this.sun = this.sunLight(0xffc48a, 2.4, 12);
@@ -85,7 +85,7 @@ class DesertDrive extends Scene3D {
 class Snowboard extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#4f86d6", "#dfeeff");
+    this.sky({ elevation: 30, azimuth: 200, turbidity: 2, rayleigh: 1 });
     this.scene.fog = new THREE.Fog(0xe8f2ff, 20, 90);
     this.scene.add(new THREE.HemisphereLight(0xdfeeff, 0x8aa0c0, 1.3));
     this.sun = this.sunLight(0xffffff, 2.2, 10);
@@ -203,7 +203,7 @@ function wedge(w, h, d, mat) {
 class StreetSkate extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#5aa9ff", "#e6f3ff");
+    this.sky({ elevation: 45, azimuth: 140 });
     this.scene.fog = new THREE.Fog(0xdcecff, 30, 110);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x7a6a5a, 1.2));
     this.sun = this.sunLight(0xfff2dd, 2.5, 10);
@@ -270,7 +270,7 @@ class StreetSkate extends Scene3D {
 class JetSki extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#3e8ede", "#bfe3ff");
+    this.sky({ elevation: 28, azimuth: 210 });
     this.scene.fog = new THREE.Fog(0xbfe3ff, 30, 110);
     this.scene.add(new THREE.HemisphereLight(0xdff2ff, 0x1f5f8b, 1.2));
     this.sun = this.sunLight(0xfff4d6, 2.6, 10);
@@ -329,7 +329,7 @@ class JetSki extends Scene3D {
 class PaperPlane extends Scene3D {
   build() {
     const r = this.rand;
-    this.scene.background = gradientTexture("#5bb2ff", "#fff1d6");
+    this.sky({ elevation: 20, azimuth: 190 });
     this.scene.fog = new THREE.Fog(0xfff1d6, 40, 160);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x2a7aa8, 1.3));
     this.sun = this.sunLight(0xfff4e0, 2.2, 18);

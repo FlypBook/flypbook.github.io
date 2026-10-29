@@ -6,11 +6,13 @@
 
 const CONFIG = window.FLYPBOOK_CONFIG;
 const PAGE_SIZE = 10;
-// Backgrounds are real footage in three moods (web/videos.json "cat"). Each story plays a run of different
-// clips from one mood. Code-drawn scenes are only a fallback when clips can't load.
+// Backgrounds: 3D gameplay (game3d.js and friends) or real footage in three moods (web/videos.json "cat").
+// Each story plays a run of different clips from one mood, or a run of different games.
 const CLIP_CATS = ["action", "satisfying", "calm"];
 const CLIP_SCENE = { action: "ActionClips", satisfying: "SatisfyingClips", calm: "CalmClips" };  // taste features
-// Calm / satisfying code-drawn scenes, used by the fallback. Everything else counts as gameplay.
+const GAMEPLAY_SHARE = 0.45;  // in Mix, this share of stories get gameplay instead of clips
+const SCENE_SECONDS = 45;     // a story's gameplay switches to a different game this often
+// Calm / satisfying code-drawn scenes. Gameplay mode only shows 3D games that aren't in this list.
 const CALM_SCENES = new Set(["OrbsScene", "WavesScene", "PendulumScene", "MarbleRun", "HydraulicPress", "SoapCut",
   "BallPour", "PotteryWheel", "LaserEngrave", "Stack3D", "Domino3D", "JellyHop", "SandSliceScene"]);
 // For You: every Nth story is a "something different" pick, per Settings > Feed > Discovery.
@@ -116,9 +118,9 @@ const SETTINGS_UI = [
     ["hlcolor", "Highlight color", [["varied", "Mix"], ["#f5d35c", "Butter"], ["#bba6f2", "Lilac"], ["#ff8a65", "Coral"], ["#9fe3b8", "Mint"]]],
   ] },
   { id: "background", title: "Background", color: "#23858f",
-    summary: () => state.settings.bg === "off" ? "Off" : `${{ mix: "A mix", action: "First-person action", satisfying: "Satisfying", calm: "Calm places" }[state.settings.bgtype] || "A mix"}${state.settings.bg === "dim" ? ", dimmed" : ""}`, items: [
+    summary: () => state.settings.bg === "off" ? "Off" : `${{ mix: "A mix", games: "Gameplay", action: "First-person action", satisfying: "Satisfying", calm: "Calm places" }[state.settings.bgtype] || "A mix"}${state.settings.bg === "dim" ? ", dimmed" : ""}`, items: [
     ["bg", "Background", [["on", "On"], ["dim", "Dim"], ["off", "Off"]]],
-    ["bgtype", "What plays", [["mix", "Mix"], ["action", "Action POV"], ["satisfying", "Satisfying"], ["calm", "Calm"]]],
+    ["bgtype", "What plays", [["mix", "Mix"], ["games", "Gameplay"], ["action", "Action POV"], ["satisfying", "Satisfying"], ["calm", "Calm"]]],
   ] },
   { id: "feed", title: "Feed", color: "#e0a526",
     summary: () => [state.settings.autoplay === "off" ? "Waits for a tap" : "Autoplay on", { any: "Any length", short: "Quick reads", long: "Longer reads" }[state.settings.length],
@@ -153,7 +155,7 @@ function loadSettings() {
 }
 /** Old background choices (code-drawn "gameplay", "real clips") map onto the real-footage moods. */
 function migrateSettings(s) {
-  s.bgtype = { games: "action", real: "satisfying" }[s.bgtype] || s.bgtype;
+  s.bgtype = { real: "satisfying" }[s.bgtype] || s.bgtype;
   return s;
 }
 let settingsSyncTimer;
@@ -168,7 +170,8 @@ function applySettings() {
   Object.assign(app.dataset, { bg: s.bg, capsize: s.capsize, contrast: s.contrast, motion: s.motion });
   applyTheme();
   window.FlypScenes = {
-    allow: name => s.bgtype === "calm" ? CALM_SCENES.has(name) : s.bgtype === "games" ? !CALM_SCENES.has(name) : true,
+    // Gameplay backgrounds are the 3D games only (the flat 2D scenes and the calm ones stay out).
+    allow: name => !CALM_SCENES.has(name) && !!SCENES.find(x => x.cls.name === name)?.cls.webgl,
     weight: name => window.taste.sceneWeight(name),
   };
   state.stories.forEach(applyCaptionLook);
@@ -538,7 +541,7 @@ async function buildForYou() {
 
 /** Turn how a reader reacted to a story into a lesson for the taste model. */
 function learnFrom(story, label, weight = 1) {
-  const bg = story.media?.kind === "video" ? CLIP_SCENE[story.media.cat] : story.media?.renderer?.scene?.constructor?.name;
+  const bg = story.media?.kind === "video" ? CLIP_SCENE[story.media.cat] : story.media?.player?.name;
   window.taste.learn(TasteModel.features(story.data, bg), label, weight);
 }
 function learnFromLeaving(story) {
@@ -1086,8 +1089,11 @@ document.querySelectorAll("#bottomnav button").forEach(b => b.addEventListener("
 /** Which mood of real clips this story gets (taste-weighted in Mix), and its own shuffled run of them. */
 function pickClips(story) {
   if (story.noVideo || !state.videos.length) return null;
-  const type = { games: "action", real: "satisfying" }[state.settings.bgtype] || state.settings.bgtype;
+  const type = state.settings.bgtype;
   const rand = seeded(story.seed);
+  // Gameplay mode never plays clips; Mix gives gameplay its share (taste-weighted) before picking a clip mood.
+  if (type === "games") return null;
+  if (type === "mix" && rand() < GAMEPLAY_SHARE) return null;
   let cat = type;
   if (!CLIP_CATS.includes(cat)) {
     const w = CLIP_CATS.map(c => window.taste.sceneWeight(CLIP_SCENE[c]) * (c === "calm" ? 0.6 : 1));
@@ -1155,6 +1161,40 @@ class ClipPlayer {
   stop() { this.live = false; this.els.forEach(v => v.pause()); }
   dispose() { this.stop(); this.els.forEach(v => { v.removeAttribute("src"); v.load(); }); }
 }
+/** Gameplay for one story: a 3D game that hands over to a different one every so often (cross-fading),
+ *  so a long story never sits on the same scene. */
+class ScenePlayer {
+  constructor(box, seed) {
+    Object.assign(this, { box, seed, i: 0, live: false, timer: null });
+    this.cur = this.make(seed);
+    this.cur.c.classList.add("on");
+  }
+  make(seed) {
+    const c = document.createElement("canvas");
+    c.className = "clip";
+    this.box.append(c);
+    return { c, r: new SceneRenderer(c, seed) };
+  }
+  get name() { return this.cur.r.scene?.constructor?.name; }
+  start() {
+    this.live = true;
+    this.cur.r.start();
+    this.timer ||= setInterval(() => this.next(), SCENE_SECONDS * 1000);
+  }
+  stop() { this.live = false; this.cur.r.stop(); clearInterval(this.timer); this.timer = null; }
+  next() {
+    if (!this.live) return;
+    const old = this.cur;
+    // A different game than the one playing now.
+    let seed = this.seed;
+    for (let k = 0; k < 8; k++) { seed = (this.seed + ++this.i * 7919) >>> 0; if (pickScene(seed) !== old.r.scene.constructor) break; }
+    this.cur = this.make(seed);
+    this.cur.r.start();
+    requestAnimationFrame(() => requestAnimationFrame(() => { this.cur.c.classList.add("on"); old.c.classList.remove("on"); }));
+    setTimeout(() => { old.r.dispose(); old.c.remove(); }, 900);
+  }
+  dispose() { this.stop(); this.cur.r.dispose(); }
+}
 function ensureMedia(story) {
   if (story.media) return;
   const clips = pickClips(story);
@@ -1162,15 +1202,12 @@ function ensureMedia(story) {
     const fail = () => { releaseMedia(story); story.noVideo = true; ensureMedia(story); updateMedia(); };
     story.media = { kind: "video", cat: clips.cat, player: new ClipPlayer(story.els.media, story.els.credit, clips, fail) };
   } else {
-    const c = document.createElement("canvas");
-    story.els.media.append(c);
-    story.media = { kind: "scene", el: c, renderer: new SceneRenderer(c, story.seed) };
+    story.media = { kind: "scene", player: new ScenePlayer(story.els.media, story.seed) };
   }
 }
 function releaseMedia(story) {
   if (!story.media) return;
-  if (story.media.kind === "video") story.media.player.dispose();
-  else story.media.renderer.dispose();
+  story.media.player.dispose();
   story.els.media.replaceChildren();
   story.els.credit.replaceChildren();
   story.media = null;
@@ -1183,8 +1220,7 @@ function updateMedia() {
     if (!near || !on) { releaseMedia(story); return; }
     ensureMedia(story);
     const m = story.media, live = i === state.active && state.playing && !document.hidden;
-    const r = m.kind === "video" ? m.player : m.renderer;
-    live ? r.start() : r.stop();
+    live ? m.player.start() : m.player.stop();
   });
 }
 
