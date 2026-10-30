@@ -6,6 +6,8 @@ on:
   schedule:
     - cron: "20 14,18,22 * * *"   # three posts a day: about 10 AM, 2 PM, 6 PM US Eastern
   workflow_dispatch:               # "Run workflow" button for a test post
+  push:
+    paths: [".github/workflows/tiktok.yml"]   # editing this file runs it once (a quick check)
 
 concurrency:
   group: tiktok
