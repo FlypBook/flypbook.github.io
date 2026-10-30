@@ -24,7 +24,7 @@ import urllib.request
 from pathlib import Path
 
 import generate_story as g
-from make_videos import render
+from make_videos import parts_needed, render
 from run_batch import supabase
 
 API = "https://open.tiktokapis.com/v2"
@@ -33,7 +33,15 @@ SCOPES = "user.info.basic,video.publish"
 POSTS_PER_RUN = int(os.environ.get("TIKTOK_POSTS_PER_RUN", "1"))
 PRIVACY = os.environ.get("TIKTOK_PRIVACY") or "SELF_ONLY"
 CUTOFF = "2026-10-28T12:00:00Z"   # only stories from the current writer
-HASHTAGS = "#storytime #aita #storytelling #fyp"
+# Hashtags per kind of story (people search and follow these), plus the general story tags.
+HASHTAGS = {
+    "aita": "#aita #amithejerk", "tifu": "#tifu #embarrassing", "petty revenge": "#pettyrevenge #revenge",
+    "malicious compliance": "#maliciouscompliance #work", "entitled people": "#entitledpeople #karen",
+    "family drama": "#familydrama #family", "friendship drama": "#friendshipdrama #friends",
+    "school drama": "#school #highschool", "workplace drama": "#work #worklife", "roommate drama": "#roommates #roommate",
+    "wholesome twist": "#wholesome #plottwist", "mystery": "#mystery #unsolved", "unexplained / eerie": "#creepy #scarystories",
+}
+GENERAL_TAGS = "#storytime #stories #fyp"
 
 
 def call(method, url, token=None, body=None, form=None, headers=None):
@@ -109,18 +117,23 @@ def finish_login(code):
     print(f"Saved. Scopes: {data.get('scope')}. The poster can post now (and keeps the login fresh by itself).")
 
 
-def next_stories(n):
-    posted = {r["story_id"] for r in supabase("GET", "tiktok_posts", "select=story_id") or []}
-    rows = supabase("GET", "stories", "select=id,title,body,audio_url,word_times&status=eq.published&source=eq.ai"
+def next_jobs(n):
+    """The next (story, part) videos to post. A waiting Part 2 always goes first, so it follows its Part 1 in the
+    very next slot; then the oldest unposted stories (long ones start with Part 1)."""
+    done = {r["story_id"]: r["status"] for r in supabase("GET", "tiktok_posts", "select=story_id,status") or []}
+    rows = supabase("GET", "stories", "select=id,title,body,audio_url,word_times,genre&status=eq.published&source=eq.ai"
                     f"&audio_url=not.is.null&word_times=not.is.null&created_at=gte.{CUTOFF}&order=created_at.asc") or []
-    return [r for r in rows if r["id"] not in posted][:n]
+    jobs = [(r, 2) for r in rows if done.get(r["id"], "").startswith("part1")]
+    jobs += [(r, parts_needed(r)[0]) for r in rows if r["id"] not in done]
+    return jobs[:n]
 
 
-def post(token, story, video):
+def post(token, story, video, part=None):
+    label = f" (Part {part})" if part else ""
     size = video.stat().st_size
     chunk = size if size <= 64 * 1024 * 1024 else 10 * 1024 * 1024
     count = max(1, size // chunk)
-    caption = f"{story['title']} {HASHTAGS}"[:2100]
+    caption = f"{story['title']}{label} {HASHTAGS.get(story.get('genre'), '')} {GENERAL_TAGS}"[:2100]
     init = call("POST", f"{API}/post/publish/video/init/", token, body={
         "post_info": {"title": caption, "privacy_level": PRIVACY, "disable_duet": False, "disable_stitch": False,
                       "disable_comment": False, "video_cover_timestamp_ms": 1500, "is_aigc": True},
@@ -159,8 +172,8 @@ def main():
             sys.exit(message + " Add both as GitHub Secrets: repo Settings > Secrets and variables > Actions.")
         print(message + " Skipping.")
         return
-    stories = next_stories(POSTS_PER_RUN)
-    if not stories:
+    jobs = next_jobs(POSTS_PER_RUN)
+    if not jobs:
         print("Nothing new to post.")
         return
     token = access_token()
@@ -168,16 +181,20 @@ def main():
     allowed = ((info.get("data") or {}).get("privacy_level_options")) or []
     if allowed and PRIVACY not in allowed:
         sys.exit(f"TikTok doesn't allow privacy {PRIVACY} for this account/app yet (allowed: {allowed}).")
-    for story in stories:
-        video = Path(f"/tmp/{story['id']}.mp4") if os.name != "nt" else Path(os.environ.get("TEMP", ".")) / f"{story['id']}.mp4"
-        print(f"Rendering: {story['title'][:70]}")
-        render(story, video)
+    for story, part in jobs:
+        name = f"{story['id']}{'-part' + str(part) if part else ''}.mp4"
+        video = Path("/tmp") / name if os.name != "nt" else Path(os.environ.get("TEMP", ".")) / name
+        print(f"Rendering{f' part {part}' if part else ''}: {story['title'][:70]}")
+        render(story, video, part)
         print(f"Posting ({video.stat().st_size // 1024} KB, privacy {PRIVACY})...")
-        publish_id, status = post(token, story, video)
-        supabase("POST", "tiktok_posts", body={"story_id": story["id"], "publish_id": publish_id, "status": status})
+        publish_id, status = post(token, story, video, part)
+        if part == 2:
+            supabase("PATCH", "tiktok_posts", f"story_id=eq.{story['id']}", {"status": f"done:{status}", "publish_id": publish_id})
+        else:
+            supabase("POST", "tiktok_posts", body={"story_id": story["id"], "publish_id": publish_id,
+                                                   "status": f"part1:{status}" if part == 1 else status})
         print(f"  {status} (publish id {publish_id})")
         video.unlink(missing_ok=True)
-
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")

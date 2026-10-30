@@ -4,7 +4,7 @@ name: Post to TikTok
 
 on:
   schedule:
-    - cron: "20 14,18,22 * * *"   # three posts a day: about 10 AM, 2 PM, 6 PM US Eastern
+    - cron: "5 1,11,14,16,19,22 * * *"   # six posts a day: about 7 AM, 10 AM, noon, 3 PM, 6 PM, 9 PM US Eastern
   workflow_dispatch:               # "Run workflow" button for a test post
   push:
     paths: [".github/workflows/tiktok.yml"]   # editing this file runs it once (a quick check)

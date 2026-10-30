@@ -1,6 +1,6 @@
 # Automatic TikTok posting: your setup steps
 
-Everything after these steps runs by itself on GitHub (your PC can be off): three times a day it turns the
+Everything after these steps runs by itself on GitHub (your PC can be off): six times a day it turns the
 next new story into a video and posts it to your TikTok account, labeled as AI-generated.
 
 TikTok's website changes now and then, so button names below may be slightly different. If something doesn't
@@ -53,10 +53,10 @@ They usually want a short screen recording showing how it works: you can record 
 When it's approved: GitHub repo > **Settings** > **Secrets and variables** > **Actions** > **Variables** tab >
 **New repository variable**: `TIKTOK_PRIVACY` = `PUBLIC_TO_EVERYONE`.
 
-From then on it posts publicly three times a day by itself.
+From then on it posts publicly six times a day by itself (long stories as Part 1 and Part 2).
 
 ## Good to know
 - **Once a year** the TikTok login expires. The poster warns about two weeks before (in the GitHub Actions log); just repeat step 5.
 - **Change how often it posts:** ask Claude (it's the schedule in `.github/workflows/tiktok.yml`).
 - **Every post gets TikTok's own "AI-generated" label**, switched on automatically. Keep it that way: TikTok requires it.
-- **Account risk:** TikTok can limit accounts that post a lot of automated content. Three a day, all different stories, is a reasonable pace.
+- **Account risk:** TikTok can limit accounts that post a lot of automated content. Six a day is the most that stays safe for a new account.
