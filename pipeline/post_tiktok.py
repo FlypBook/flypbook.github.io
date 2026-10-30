@@ -154,7 +154,10 @@ def main():
     if len(sys.argv) > 2 and sys.argv[1] == "code":
         return finish_login(sys.argv[2])
     if not (g.has_setting("TIKTOK_CLIENT_KEY") and g.has_setting("TIKTOK_CLIENT_SECRET")):
-        print("TikTok posting isn't set up yet (no TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET). Skipping.")
+        message = "TikTok posting isn't set up (no TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET)."
+        if os.environ.get("GITHUB_ACTIONS"):  # on GitHub, make it a visible failure (red X, and an email)
+            sys.exit(message + " Add both as GitHub Secrets: repo Settings > Secrets and variables > Actions.")
+        print(message + " Skipping.")
         return
     stories = next_stories(POSTS_PER_RUN)
     if not stories:
