@@ -1263,6 +1263,7 @@ function endStory(story) {
   story.card.classList.add("ended");
   story.card.classList.remove("paused");
   logEvent(story, "finish", 1);
+  window.FlypStats?.finished();
   window.Rewards?.award("finish", story.data);
   rememberFinished(story.data.id);
   renderEndcard(story);
@@ -1377,6 +1378,7 @@ function setActive(index) {
   }
   state.active = index;
   state.viewed++;
+  window.FlypStats?.viewed();
   if (maybeBreak()) return;
   // Settings > Feed > Next story: plays by itself, or waits for a tap.
   state.playing = state.settings.autoplay !== "off" || state.viewed <= 1;
